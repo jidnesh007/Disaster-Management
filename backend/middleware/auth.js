@@ -1,7 +1,6 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 
-// Verify JWT token
 export const authenticateToken = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -11,18 +10,25 @@ export const authenticateToken = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         message: "Access token required",
+        code: "NO_TOKEN",
       });
     }
 
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // Optional: Enable issuer/audience if used in JWT
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET /*, {
+         issuer: process.env.JWT_ISSUER || "disaster-management",
+         audience: process.env.JWT_AUDIENCE || "disaster-management-users",
+       }*/
+    );
 
-    // Find user and attach to request
     const user = await User.findById(decoded.userId).select("-password");
     if (!user) {
       return res.status(401).json({
         success: false,
         message: "User not found",
+        code: "USER_NOT_FOUND",
       });
     }
 
@@ -30,6 +36,7 @@ export const authenticateToken = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         message: "Account is deactivated",
+        code: "ACCOUNT_DEACTIVATED",
       });
     }
 
@@ -40,29 +47,32 @@ export const authenticateToken = async (req, res, next) => {
       return res.status(403).json({
         success: false,
         message: "Invalid token",
+        code: "INVALID_TOKEN",
       });
     }
     if (error.name === "TokenExpiredError") {
       return res.status(403).json({
         success: false,
         message: "Token expired",
+        code: "TOKEN_EXPIRED",
       });
     }
 
     res.status(500).json({
       success: false,
       message: "Server error during authentication",
+      code: "SERVER_ERROR",
     });
   }
 };
 
-// Check user roles
 export const authorize = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({
         success: false,
         message: "Not authenticated",
+        code: "NOT_AUTHENTICATED",
       });
     }
 
@@ -70,6 +80,7 @@ export const authorize = (...roles) => {
       return res.status(403).json({
         success: false,
         message: "Access denied. Insufficient permissions",
+        code: "INSUFFICIENT_PERMISSIONS",
       });
     }
 
@@ -77,14 +88,19 @@ export const authorize = (...roles) => {
   };
 };
 
-// Optional authentication (for public routes that can benefit from user context)
 export const optionalAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
     const token = authHeader && authHeader.split(" ")[1];
 
     if (token) {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(
+        token,
+        process.env.JWT_SECRET /*, {
+           issuer: process.env.JWT_ISSUER || "disaster-management",
+           audience: process.env.JWT_AUDIENCE || "disaster-management-users",
+         }*/
+      );
       const user = await User.findById(decoded.userId).select("-password");
       if (user && user.isActive) {
         req.user = user;
@@ -93,7 +109,6 @@ export const optionalAuth = async (req, res, next) => {
 
     next();
   } catch (error) {
-    // Continue without authentication for optional auth
     next();
   }
 };

@@ -1,17 +1,58 @@
+import React from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import HomePage from "./pages/HomePage";
-import LoginPage from "./pages/LoginPage";
-import Volunteer from "./pages/Volunteer";
+import LoginPage from "./pages/LoginPage.jsx";
+import Volunteer from "./pages/Volunteer.jsx";
+import Admin from "./pages/Admin.jsx";
+import HomePage from "./pages/HomePage.jsx";
+import CoordinatorDashboard from "./CoordinatorDashboard.jsx";
+
+class ErrorBoundary extends React.Component {
+  state = { hasError: false, error: null };
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-4 text-center min-h-screen bg-gray-50">
+          <h2 className="text-2xl text-red-600 mb-2">Something went wrong</h2>
+          <p className="text-gray-600 mb-4">{this.state.error?.message}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Reload Page
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/volunteer" element={<Volunteer />} />
-        <Route path="/dashboard" element={<div>Dashboard Placeholder</div>} />
-      </Routes>
+      <ErrorBoundary>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/volunteer" element={<Volunteer />} />
+          <Route path="/admin" element={<Admin />} />
+          <Route path="/coordinator" element={<CoordinatorDashboard />} />
+          <Route path="/dashboard" element={<div>Dashboard Placeholder</div>} />
+          <Route
+            path="*"
+            element={
+              <div className="p-4 text-center">
+                <h2 className="text-2xl text-gray-900">404 - Page Not Found</h2>
+              </div>
+            }
+          />
+        </Routes>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }

@@ -26,7 +26,7 @@ const userSchema = new mongoose.Schema(
     role: {
       type: String,
       enum: ["admin", "coordinator", "volunteer", "citizen"],
-      default: "citizen",
+      default: "volunteer",
     },
     phone: {
       type: String,
@@ -51,6 +51,43 @@ const userSchema = new mongoose.Schema(
     isVerified: {
       type: Boolean,
       default: false,
+    },
+    isAvailable: {
+      type: Boolean,
+      default: false,
+    },
+    assignedOperations: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "RescueOperation",
+      },
+    ],
+    skills: {
+      type: [String],
+      default: [],
+    },
+    rating: {
+      type: Number,
+      default: 4.8,
+    },
+    level: {
+      type: String,
+      default: "Expert",
+    },
+    badges: {
+      type: [String],
+      default: ["Quick Responder", "Life Saver"],
+    },
+    totalHours: {
+      type: Number,
+      default: 156,
+    },
+    profilePicture: {
+      type: String,
+      default: null,
+    },
+    lastAvailabilityUpdate: {
+      type: Date,
     },
   },
   {

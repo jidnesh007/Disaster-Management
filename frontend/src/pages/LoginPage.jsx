@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Eye,
@@ -9,6 +9,7 @@ import {
   Mail,
   Lock,
 } from "lucide-react";
+import _ from "lodash";
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -30,6 +31,9 @@ const LoginPage = () => {
     phone: "",
   });
 
+  // Use Vite's environment variable access
+  const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+
   const validateEmail = (email) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
@@ -38,145 +42,163 @@ const LoginPage = () => {
     const newErrors = {};
 
     if (isRegistering) {
-      if (!registerData.name.trim()) {
-        newErrors.name = "Name is required";
-      }
-      if (!registerData.email.trim()) {
-        newErrors.email = "Email is required";
-      } else if (!validateEmail(registerData.email)) {
-        newErrors.email = "Please enter a valid email";
-      }
-      if (!registerData.password) {
-        newErrors.password = "Password is required";
-      } else if (registerData.password.length < 6) {
+      if (!registerData.name.trim()) newErrors.name = "Name is required";
+      if (!registerData.email.trim()) newErrors.email = "Email is required";
+      else if (!validateEmail(registerData.email))
+        newErrors.email = "Invalid email";
+      if (!registerData.password) newErrors.password = "Password is required";
+      else if (registerData.password.length < 6)
         newErrors.password = "Password must be at least 6 characters";
-      }
-      if (registerData.password !== registerData.confirmPassword) {
+      if (registerData.password !== registerData.confirmPassword)
         newErrors.confirmPassword = "Passwords do not match";
-      }
     } else {
-      if (!formData.email.trim()) {
-        newErrors.email = "Email is required";
-      } else if (!validateEmail(formData.email)) {
-        newErrors.email = "Please enter a valid email";
-      }
-      if (!formData.password) {
-        newErrors.password = "Password is required";
-      }
+      if (!formData.email.trim()) newErrors.email = "Email is required";
+      else if (!validateEmail(formData.email))
+        newErrors.email = "Invalid email";
+      if (!formData.password) newErrors.password = "Password is required";
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleLogin = async () => {
-    if (!validateForm()) return;
+  const handleLogin = useCallback(
+    _.debounce(async () => {
+      if (!validateForm()) return;
 
-    setIsLoading(true);
-    setMessage("");
+      setIsLoading(true);
+      setMessage("");
 
-    try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
-      });
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(formData),
+        });
 
-      const data = await response.json();
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || "Login failed");
+        }
 
-      if (data.success) {
-        localStorage.setItem("token", data.data.token);
-        localStorage.setItem("user", JSON.stringify(data.data.user));
-        setMessage("Login successful! Redirecting...");
-        setTimeout(() => {
-          if (data.data.user.role === "volunteer") {
-            navigate("/volunteer");
-          } else {
-            navigate("/dashboard");
-          }
-        }, 1500);
-      } else {
-        setMessage(data.message || "Login failed");
+        const data = await response.json();
+
+        if (data.success) {
+          localStorage.setItem("token", data.data.token);
+          localStorage.setItem("user", JSON.stringify(data.data.user));
+          setMessage("Login successful! Redirecting...");
+          setTimeout(() => {
+            const user = data.data.user;
+            switch (user.role) {
+              case "volunteer":
+                navigate("/volunteer");
+                break;
+              case "admin":
+                navigate("/admin");
+                break;
+              case "coordinator":
+                navigate("/coordinator");
+                break;
+              default:
+                navigate("/dashboard");
+            }
+          }, 1500);
+        } else {
+          setMessage(data.message || "Login failed");
+        }
+      } catch (error) {
+        console.error("Login error:", error);
+        setMessage(
+          error.message.includes("fetch")
+            ? "Cannot connect to server. Please ensure the backend is running."
+            : error.message || "Network error occurred."
+        );
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error("Login error:", error);
-      setMessage(
-        "Network error. Please check if the backend server is running."
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    }, 500),
+    [formData, navigate]
+  );
 
-  const handleRegister = async () => {
-    if (!validateForm()) return;
+  const handleRegister = useCallback(
+    _.debounce(async () => {
+      if (!validateForm()) return;
 
-    setIsLoading(true);
-    setMessage("");
+      setIsLoading(true);
+      setMessage("");
 
-    try {
-      const response = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: registerData.name,
-          email: registerData.email,
-          password: registerData.password,
-          role: registerData.role,
-          phone: registerData.phone,
-        }),
-      });
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: registerData.name,
+            email: registerData.email,
+            password: registerData.password,
+            role: registerData.role,
+            phone: registerData.phone,
+          }),
+        });
 
-      const data = await response.json();
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || "Registration failed");
+        }
 
-      if (data.success) {
-        localStorage.setItem("token", data.data.token);
-        localStorage.setItem("user", JSON.stringify(data.data.user));
-        setMessage("Registration successful! Redirecting...");
-        setTimeout(() => {
-          if (data.data.user.role === "volunteer") {
-            navigate("/volunteer");
-          } else {
-            navigate("/dashboard");
-          }
-        }, 1500);
-      } else {
-        setMessage(data.message || "Registration failed");
+        const data = await response.json();
+
+        if (data.success) {
+          localStorage.setItem("token", data.data.token);
+          localStorage.setItem("user", JSON.stringify(data.data.user));
+          setMessage("Registration successful! Redirecting...");
+          setTimeout(() => {
+            const user = data.data.user;
+            switch (user.role) {
+              case "volunteer":
+                navigate("/volunteer");
+                break;
+              case "admin":
+                navigate("/admin");
+                break;
+              case "coordinator":
+                navigate("/coordinator");
+                break;
+              default:
+                navigate("/dashboard");
+            }
+          }, 1500);
+        } else {
+          setMessage(data.message || "Registration failed");
+        }
+      } catch (error) {
+        console.error("Registration error:", error);
+        setMessage(
+          error.message.includes("fetch")
+            ? "Cannot connect to server. Please ensure the backend is running."
+            : error.message || "Network error occurred."
+        );
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error("Registration error:", error);
-      setMessage(
-        "Network error. Please check if the backend server is running."
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    }, 500),
+    [registerData, navigate]
+  );
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
 
     if (isRegistering) {
-      setRegisterData((prev) => ({
-        ...prev,
-        [name]: value,
-      }));
+      setRegisterData((prev) => ({ ...prev, [name]: value }));
     } else {
-      setFormData((prev) => ({
-        ...prev,
-        [name]: value,
-      }));
+      setFormData((prev) => ({ ...prev, [name]: value }));
     }
 
     if (errors[name]) {
-      setErrors((prev) => ({
-        ...prev,
-        [name]: "",
-      }));
+      setErrors((prev) => ({ ...prev, [name]: "" }));
     }
   };
 
@@ -223,7 +245,7 @@ const LoginPage = () => {
                   Full Name
                 </label>
                 <div className="mt-2 relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center justify-center pointer-events-none">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <User className="h-4 w-4 text-gray-400" />
                   </div>
                   <input
@@ -232,16 +254,16 @@ const LoginPage = () => {
                     type="text"
                     value={registerData.name}
                     onChange={handleInputChange}
-                    className={`block w-full pl-10 pr-3 py-2 border ${
+                    className={`block w-full pl-10 px-3 py-2 border ${
                       errors.name ? "border-red-300" : "border-gray-300"
-                    } rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-red-500 focus:border-red-500`}
+                    } rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
                     placeholder="Enter your full name"
+                    required
                   />
                 </div>
                 {errors.name && (
                   <p className="mt-1 text-sm text-red-600 flex items-center">
-                    <AlertCircle className="h-4 w-4 mr-1" />
-                    {errors.name}
+                    <AlertCircle className="h-4 w-4 mr-1" /> {errors.name}
                   </p>
                 )}
               </div>
@@ -255,7 +277,7 @@ const LoginPage = () => {
                 Email Address
               </label>
               <div className="mt-2 relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center justify-center pointer-events-none">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Mail className="h-4 w-4 text-gray-400" />
                 </div>
                 <input
@@ -264,16 +286,16 @@ const LoginPage = () => {
                   type="email"
                   value={isRegistering ? registerData.email : formData.email}
                   onChange={handleInputChange}
-                  className={`block w-full pl-10 pr-3 py-2 border ${
+                  className={`block w-full pl-10 px-3 py-2 border ${
                     errors.email ? "border-red-300" : "border-gray-300"
-                  } rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-red-500 focus:border-red-500`}
+                  } rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
                   placeholder="Enter your email"
+                  required
                 />
               </div>
               {errors.email && (
                 <p className="mt-1 text-sm text-red-600 flex items-center">
-                  <AlertCircle className="h-4 w-4 mr-1" />
-                  {errors.email}
+                  <AlertCircle className="h-4 w-4 mr-1" /> {errors.email}
                 </p>
               )}
             </div>
@@ -294,7 +316,7 @@ const LoginPage = () => {
                       type="tel"
                       value={registerData.phone}
                       onChange={handleInputChange}
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-red-500 focus:border-red-500"
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                       placeholder="Enter your phone number"
                     />
                   </div>
@@ -313,7 +335,7 @@ const LoginPage = () => {
                       name="role"
                       value={registerData.role}
                       onChange={handleInputChange}
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500"
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value="citizen">Citizen</option>
                       <option value="volunteer">Volunteer</option>
@@ -333,7 +355,7 @@ const LoginPage = () => {
                 Password
               </label>
               <div className="mt-2 relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center justify-center pointer-events-none">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Lock className="h-4 w-4 text-gray-400" />
                 </div>
                 <input
@@ -344,12 +366,13 @@ const LoginPage = () => {
                     isRegistering ? registerData.password : formData.password
                   }
                   onChange={handleInputChange}
-                  className={`block w-full pl-10 pr-10 py-2 border ${
+                  className={`block w-full pl-10 pr-10 px-3 py-2 border ${
                     errors.password ? "border-red-300" : "border-gray-300"
-                  } rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-red-500 focus:border-red-500`}
+                  } rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
                   placeholder="Enter your password"
+                  required
                 />
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center justify-center">
+                <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
@@ -365,8 +388,7 @@ const LoginPage = () => {
               </div>
               {errors.password && (
                 <p className="mt-1 text-sm text-red-600 flex items-center">
-                  <AlertCircle className="h-4 w-4 mr-1" />
-                  {errors.password}
+                  <AlertCircle className="h-4 w-4 mr-1" /> {errors.password}
                 </p>
               )}
             </div>
@@ -380,7 +402,7 @@ const LoginPage = () => {
                   Confirm Password
                 </label>
                 <div className="mt-2 relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center justify-center pointer-events-none">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <Lock className="h-4 w-4 text-gray-400" />
                   </div>
                   <input
@@ -389,17 +411,18 @@ const LoginPage = () => {
                     type="password"
                     value={registerData.confirmPassword}
                     onChange={handleInputChange}
-                    className={`block w-full pl-10 pr-3 py-2 border ${
+                    className={`block w-full pl-10 px-3 py-2 border ${
                       errors.confirmPassword
                         ? "border-red-300"
                         : "border-gray-300"
-                    } rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-red-500 focus:border-red-500`}
+                    } rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
                     placeholder="Confirm your password"
+                    required
                   />
                 </div>
                 {errors.confirmPassword && (
                   <p className="mt-1 text-sm text-red-600 flex items-center">
-                    <AlertCircle className="h-4 w-4 mr-1" />
+                    <AlertCircle className="h-4 w-4 mr-1" />{" "}
                     {errors.confirmPassword}
                   </p>
                 )}
@@ -411,7 +434,7 @@ const LoginPage = () => {
                 className={`p-3 rounded-md ${
                   message.includes("successful")
                     ? "bg-green-50 text-green-800"
-                    : "bg-red-50 text-red-800"
+                    : "bg-red-50 text-red-600"
                 }`}
               >
                 <p className="text-sm">{message}</p>
@@ -423,7 +446,7 @@ const LoginPage = () => {
                 type="button"
                 onClick={isRegistering ? handleRegister : handleLogin}
                 disabled={isLoading}
-                className="group relative w-full flex items-center justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="group relative w-full flex items-center justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoading ? (
                   <div className="flex items-center justify-center">

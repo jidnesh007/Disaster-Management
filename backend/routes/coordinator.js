@@ -2,10 +2,11 @@ import express from "express";
 import { authenticateToken, authorize } from "../middleware/auth.js";
 import RescueOperation from "../models/RescueOperation.js";
 import User from "../models/User.js";
-import Communication from "../models/Communication.js";
+import CommunicationFactory from "../models/Communication.js";
 import Report from "../models/Report.js";
+import mongoose from "mongoose";
 
-// Debug log to confirm Communication model import
+const Communication = CommunicationFactory();
 console.log("Imported Communication model:", Communication);
 
 const router = express.Router();
@@ -27,10 +28,10 @@ router.get(
         data: operations,
       });
     } catch (error) {
-      console.error("Fetch operations error:", error);
+      console.error("Fetch operations error:", error.stack);
       res.status(500).json({
         success: false,
-        message: "Server error",
+        message: `Server error: ${error.message}`,
       });
     }
   }
@@ -54,19 +55,55 @@ router.post(
         equipment,
         weatherConditions,
         riskLevel,
+        requester,
+        type,
+        category,
       } = req.body;
 
-      if (!title || !description || !location?.name) {
+      if (
+        !title ||
+        !description ||
+        !location?.name ||
+        !location?.address ||
+        !location?.coordinates?.latitude ||
+        !location?.coordinates?.longitude ||
+        !requester?.name ||
+        !requester?.phone ||
+        !type ||
+        !category
+      ) {
         return res.status(400).json({
           success: false,
-          message: "Title, description, and location are required",
+          message:
+            "Title, description, location (name, address, coordinates), requester (name, phone), type, and category are required",
+        });
+      }
+
+      const validCategories = ["rescue", "evacuation", "medical", "supply"];
+      if (!validCategories.includes(category)) {
+        return res.status(400).json({
+          success: false,
+          message: `Category must be one of: ${validCategories.join(", ")}`,
         });
       }
 
       const operation = new RescueOperation({
         title,
         description,
-        location,
+        location: {
+          name: location.name,
+          address: location.address,
+          coordinates: {
+            latitude: location.coordinates.latitude,
+            longitude: location.coordinates.longitude,
+          },
+        },
+        requester: {
+          name: requester.name,
+          phone: requester.phone,
+        },
+        type,
+        category,
         priority: priority || "medium",
         estimatedDuration: estimatedDuration || 60,
         teamSize: teamSize || 1,
@@ -93,22 +130,29 @@ router.post(
         data: operation,
       });
     } catch (error) {
-      console.error("Create operation error:", error);
+      console.error("Create operation error:", error.stack);
       res.status(500).json({
         success: false,
-        message: "Server error",
+        message: `Server error: ${error.message}`,
       });
     }
   }
 );
 
-// Get notifications (communications for the coordinator)
+// Get notifications
 router.get(
   "/notifications",
   authenticateToken,
   authorize("coordinator"),
   async (req, res) => {
     try {
+      console.log(
+        "Using Communication model in /notifications route:",
+        Communication
+      );
+      if (!Communication || typeof Communication.find !== "function") {
+        throw new Error("Communication model is not properly initialized");
+      }
       const notifications = await Communication.find({
         recipients: req.user._id,
       })
@@ -116,22 +160,21 @@ router.get(
         .populate("sentBy", "name")
         .sort({ createdAt: -1 })
         .limit(20);
-
       res.json({
         success: true,
         data: notifications,
       });
     } catch (error) {
-      console.error("Fetch notifications error:", error);
+      console.error("Fetch notifications error:", error.stack);
       res.status(500).json({
         success: false,
-        message: "Server error",
+        message: `Server error: ${error.message}`,
       });
     }
   }
 );
 
-// Get all volunteers with enhanced details
+// Get all volunteers
 router.get(
   "/volunteers",
   authenticateToken,
@@ -179,10 +222,10 @@ router.get(
         data: enhancedVolunteers,
       });
     } catch (error) {
-      console.error("Fetch volunteers error:", error);
+      console.error("Fetch volunteers error:", error.stack);
       res.status(500).json({
         success: false,
-        message: "Server error",
+        message: `Server error: ${error.message}`,
       });
     }
   }
@@ -241,10 +284,10 @@ router.get(
         data: stats,
       });
     } catch (error) {
-      console.error("Fetch stats error:", error);
+      console.error("Fetch stats error:", error.stack);
       res.status(500).json({
         success: false,
-        message: "Server error",
+        message: `Server error: ${error.message}`,
       });
     }
   }
@@ -303,10 +346,10 @@ router.put(
         data: operation,
       });
     } catch (error) {
-      console.error("Update operation status error:", error);
+      console.error("Update operation status error:", error.stack);
       res.status(500).json({
         success: false,
-        message: "Server error",
+        message: `Server error: ${error.message}`,
       });
     }
   }
@@ -319,35 +362,34 @@ router.get(
   authorize("coordinator"),
   async (req, res) => {
     try {
-      // Debug log to confirm Communication is available in the route
       console.log(
         "Using Communication model in /communications route:",
         Communication
       );
-      if (!Communication) {
-        throw new Error("Communication model is undefined");
+      if (!Communication || typeof Communication.find !== "function") {
+        throw new Error("Communication model is not properly initialized");
       }
-
       const communications = await Communication.find()
         .populate("operationId", "title")
         .populate("sentBy", "name")
         .sort({ createdAt: -1 })
         .limit(50);
-
       const formattedCommunications = communications.map((comm) => ({
         ...comm.toObject(),
-        operationTitle: comm.operationId?.title || "Unknown Operation",
+        operationTitle: comm.operationId
+          ? comm.operationId.title
+          : "Unknown Operation",
+        sentByName: comm.sentBy ? comm.sentBy.name : "Unknown User",
       }));
-
       res.json({
         success: true,
         data: formattedCommunications,
       });
     } catch (error) {
-      console.error("Fetch communications error:", error);
+      console.error("Fetch communications error:", error.stack);
       res.status(500).json({
         success: false,
-        message: "Server error",
+        message: `Server error: ${error.message}`,
       });
     }
   }
@@ -408,10 +450,10 @@ router.post(
         },
       });
     } catch (error) {
-      console.error("Send communication error:", error);
+      console.error("Send communication error:", error.stack);
       res.status(500).json({
         success: false,
-        message: "Server error",
+        message: `Server error: ${error.message}`,
       });
     }
   }
@@ -434,10 +476,10 @@ router.get(
         data: reports,
       });
     } catch (error) {
-      console.error("Fetch reports error:", error);
+      console.error("Fetch reports error:", error.stack);
       res.status(500).json({
         success: false,
-        message: "Server error",
+        message: `Server error: ${error.message}`,
       });
     }
   }
@@ -494,10 +536,10 @@ router.post(
         data: report,
       });
     } catch (error) {
-      console.error("Generate report error:", error);
+      console.error("Generate report error:", error.stack);
       res.status(500).json({
         success: false,
-        message: "Server error",
+        message: `Server error: ${error.message}`,
       });
     }
   }
@@ -661,11 +703,26 @@ router.post(
     try {
       const { id } = req.params;
       const { volunteerIds, roles } = req.body;
+      console.log("Assign request body:", req.body);
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid operation ID format",
+        });
+      }
 
       if (!volunteerIds || !Array.isArray(volunteerIds)) {
         return res.status(400).json({
           success: false,
           message: "Volunteer IDs array is required",
+        });
+      }
+
+      if (!volunteerIds.every((vid) => mongoose.Types.ObjectId.isValid(vid))) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid volunteer ID format",
         });
       }
 
@@ -676,6 +733,11 @@ router.post(
           message: "Operation not found",
         });
       }
+
+      console.log(
+        "Operation before update:",
+        JSON.stringify(operation, null, 2)
+      );
 
       const volunteers = await User.find({
         _id: { $in: volunteerIds },
@@ -702,7 +764,7 @@ router.post(
       operation.updates.push({
         message: `${volunteers.length} volunteers assigned to operation`,
         updatedBy: req.user._id,
-        type: "assignment",
+        type: "update", // Changed from "assignment" to "update" to match enum
         date: new Date(),
       });
 
@@ -714,10 +776,17 @@ router.post(
         data: operation,
       });
     } catch (error) {
-      console.error("Assign volunteers error:", error);
+      console.error("Assign volunteers error:", error.stack);
+      if (error.name === "ValidationError") {
+        const errors = Object.values(error.errors).map((err) => err.message);
+        return res.status(400).json({
+          success: false,
+          message: `Validation error: ${errors.join(", ")}`,
+        });
+      }
       res.status(500).json({
         success: false,
-        message: "Server error",
+        message: `Server error: ${error.message}`,
       });
     }
   }
@@ -756,7 +825,7 @@ router.delete(
       operation.updates.push({
         message: "Volunteer removed from operation",
         updatedBy: req.user._id,
-        type: "unassignment",
+        type: "update",
         date: new Date(),
       });
 
@@ -768,10 +837,10 @@ router.delete(
         data: operation,
       });
     } catch (error) {
-      console.error("Remove volunteer error:", error);
+      console.error("Remove volunteer error:", error.stack);
       res.status(500).json({
         success: false,
-        message: "Server error",
+        message: `Server error: ${error.message}`,
       });
     }
   }

@@ -88,7 +88,17 @@ const CoordinatorDashboard = () => {
   const [newOperation, setNewOperation] = useState({
     title: "",
     description: "",
-    location: { name: "", coordinates: [0, 0] },
+    location: {
+      name: "",
+      address: "",
+      coordinates: { latitude: 0, longitude: 0 },
+    },
+    requester: {
+      name: "",
+      phone: "",
+    },
+    type: "",
+    category: "",
     priority: "medium",
     estimatedDuration: 60,
     teamSize: 1,
@@ -116,7 +126,6 @@ const CoordinatorDashboard = () => {
   const API_BASE_URL = "http://localhost:3000";
   const WS_URL = "ws://localhost:3000";
 
-  // Cleanup function for WebSocket
   const cleanupWebSocket = useCallback(() => {
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
@@ -141,7 +150,6 @@ const CoordinatorDashboard = () => {
     isConnectingRef.current = false;
   }, []);
 
-  // Handle real-time updates
   const handleRealTimeUpdate = useCallback((data) => {
     try {
       switch (data.type) {
@@ -171,7 +179,6 @@ const CoordinatorDashboard = () => {
     }
   }, []);
 
-  // Connect WebSocket with proper error handling
   const connectWebSocket = useCallback(() => {
     if (isConnectingRef.current || !realTimeUpdates) {
       return;
@@ -188,7 +195,6 @@ const CoordinatorDashboard = () => {
     isConnectingRef.current = true;
     setWsStatus("connecting");
 
-    // Add a 1-second delay for the first attempt
     const delay = retryCountRef.current === 0 ? 1000 : 0;
     setTimeout(() => {
       console.log(
@@ -257,7 +263,6 @@ const CoordinatorDashboard = () => {
     }, delay);
   }, [realTimeUpdates, cleanupWebSocket, handleRealTimeUpdate]);
 
-  // WebSocket connection management effect
   useEffect(() => {
     if (realTimeUpdates) {
       connectWebSocket();
@@ -271,7 +276,6 @@ const CoordinatorDashboard = () => {
     };
   }, [realTimeUpdates, connectWebSocket, cleanupWebSocket]);
 
-  // Reset retry count when real-time updates are toggled
   useEffect(() => {
     retryCountRef.current = 0;
   }, [realTimeUpdates]);
@@ -381,12 +385,38 @@ const CoordinatorDashboard = () => {
   }, [fetchData]);
 
   const handleCreateOperation = async () => {
+    const {
+      title,
+      description,
+      location,
+      requester,
+      type,
+      category,
+    } = newOperation;
+
     if (
-      !newOperation.title ||
-      !newOperation.description ||
-      !newOperation.location.name
+      !title ||
+      !description ||
+      !location.name ||
+      !location.address ||
+      !location.coordinates.latitude ||
+      !location.coordinates.longitude ||
+      !requester.name ||
+      !requester.phone ||
+      !type ||
+      !category
     ) {
-      setError("Please fill in all required fields");
+      setError(
+        "Please fill in all required fields: title, description, location (name, address, coordinates), requester (name, phone), type, and category"
+      );
+      return;
+    }
+
+    const validCategories = ["rescue", "evacuation", "medical", "supply"];
+    if (!validCategories.includes(category)) {
+      setError(
+        `Category must be one of: ${validCategories.join(", ")}`
+      );
       return;
     }
 
@@ -415,7 +445,17 @@ const CoordinatorDashboard = () => {
         setNewOperation({
           title: "",
           description: "",
-          location: { name: "", coordinates: [0, 0] },
+          location: {
+            name: "",
+            address: "",
+            coordinates: { latitude: 0, longitude: 0 },
+          },
+          requester: {
+            name: "",
+            phone: "",
+          },
+          type: "",
+          category: "",
           priority: "medium",
           estimatedDuration: 60,
           teamSize: 1,
@@ -1148,60 +1188,410 @@ const CoordinatorDashboard = () => {
         </div>
 
         <div className="space-y-4">
-          <h4 className="font-medium text-gray-900">Recent Reports</h4>
-          {reports.map((report) => (
-            <div
-              key={report._id}
-              className="border border-gray-200 rounded-lg p-4"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <h5 className="font-medium text-gray-900">{report.title}</h5>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500">
-                    {new Date(report.createdAt).toLocaleDateString()}
+                    <h4 className="text-md font-semibold text-gray-900 mb-2">
+            Recent Reports
+          </h4>
+          <div className="space-y-4 max-h-96 overflow-y-auto">
+            {reports.map((report) => (
+              <div
+                key={report._id}
+                className="border border-gray-200 rounded-lg p-4"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-900">
+                    {report.title}
                   </span>
-                  <button className="p-1 text-gray-400 hover:text-blue-600">
+                  <span className="text-xs text-gray-500">
+                    {new Date(report.createdAt).toLocaleString()}
+                  </span>
+                </div>
+                <p className="text-gray-600 text-sm mb-2">
+                  {report.description || "No description available"}
+                </p>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`text-xs px-2 py-1 rounded ${getStatusColor(
+                      report.status
+                    )}`}
+                  >
+                    {report.status.toUpperCase()}
+                  </span>
+                  <button
+                    onClick={() => handleDownloadReport(report._id)}
+                    className="text-blue-600 hover:text-blue-800"
+                  >
                     <Download className="h-4 w-4" />
                   </button>
                 </div>
               </div>
-              <p className="text-sm text-gray-600 mb-2">
-                {report.description || "No description available"}
-              </p>
-              <div className="flex items-center gap-4 text-xs text-gray-500">
-                <span>Type: {report.type}</span>
-                <span>•</span>
-                <span>Operations: {report.data?.summary?.length || 0}</span>
-                <span>•</span>
-                <span>Status: Generated</span>
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </div>
   );
 
-  const CreateOperationModal = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
+  const handleDownloadReport = async (reportId) => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(
+        `${API_BASE_URL}/api/coordinator/reports/${reportId}/download`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to download report");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `report-${reportId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      setSuccess("Report downloaded successfully");
+      setTimeout(() => setSuccess(""), 3000);
+    } catch (err) {
+      setError(`Error downloading report: ${err.message}`);
+    }
+  };
+
+  const NotificationPanel = () => (
+    <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-100 p-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">
+        Notifications
+      </h3>
+      <div className="space-y-4 max-h-96 overflow-y-auto">
+        {notifications.map((notification) => (
+          <div
+            key={notification._id}
+            className="flex items-start gap-3 p-3 border-b border-gray-100"
+          >
+            <Bell className="h-5 w-5 text-blue-500 mt-1" />
+            <div className="flex-1">
+              <p className="text-sm text-gray-800">{notification.message}</p>
+              <p className="text-xs text-gray-500">
+                {new Date(notification.createdAt).toLocaleString()}
+              </p>
+            </div>
+            {notification.operationId && (
+              <button
+                onClick={() =>
+                  setSelectedOperation(
+                    operations.find((op) => op._id === notification.operationId)
+                  )
+                }
+                className="text-blue-600 hover:text-blue-800"
+              >
+                <Eye className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const OperationDetailsModal = () => {
+    if (!selectedOperation) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">
-              Create New Operation
+            <h3 className="text-xl font-semibold text-gray-900">
+              {selectedOperation.title}
             </h3>
             <button
-              onClick={() => setShowCreateOperation(false)}
-              className="p-2 text-gray-400 hover:text-gray-600"
+              onClick={() => setSelectedOperation(null)}
+              className="text-gray-500 hover:text-gray-700"
             >
-              <X className="h-5 w-5" />
+              <X className="h-6 w-6" />
             </button>
           </div>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Operation Title *
+              <p className="text-sm font-medium text-gray-600">Description</p>
+              <p className="text-gray-800">{selectedOperation.description}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-600">Location</p>
+              <p className="text-gray-800">
+                {selectedOperation.location.name} (
+                {selectedOperation.location.address})
+              </p>
+              <p className="text-gray-600 text-sm">
+                Coordinates: {selectedOperation.location.coordinates.latitude},{" "}
+                {selectedOperation.location.coordinates.longitude}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-600">Status</p>
+              <span
+                className={`px-3 py-1 text-xs rounded-full ${getStatusColor(
+                  selectedOperation.status
+                )}`}
+              >
+                {selectedOperation.status.toUpperCase()}
+              </span>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-600">Priority</p>
+              <span
+                className={`px-3 py-1 text-xs rounded-full ${getPriorityColor(
+                  selectedOperation.priority
+                )} text-white`}
+              >
+                {selectedOperation.priority.toUpperCase()}
+              </span>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-600">Requester</p>
+              <p className="text-gray-800">
+                {selectedOperation.requester.name} (
+                {selectedOperation.requester.phone})
+              </p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-600">Team</p>
+              <p className="text-gray-800">
+                {selectedOperation.assignedVolunteers?.length || 0} /{" "}
+                {selectedOperation.teamSize} assigned
+              </p>
+            </div>
+            {selectedOperation.requiredSkills?.length > 0 && (
+              <div>
+                <p className="text-sm font-medium text-gray-600">
+                  Required Skills
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {selectedOperation.requiredSkills.map((skill, index) => (
+                    <span
+                      key={index}
+                      className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded"
+                    >
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {selectedOperation.equipment?.length > 0 && (
+              <div>
+                <p className="text-sm font-medium text-gray-600">Equipment</p>
+                <div className="flex flex-wrap gap-2">
+                  {selectedOperation.equipment.map((item, index) => (
+                    <span
+                      key={index}
+                      className="text-xs bg-gray-100 text-gray-800 px-2 py-1 rounded"
+                    >
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div>
+              <p className="text-sm font-medium text-gray-600">
+                Estimated Duration
+              </p>
+              <p className="text-gray-800">
+                {Math.floor(selectedOperation.estimatedDuration / 60)}h{" "}
+                {selectedOperation.estimatedDuration % 60}m
+              </p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-600">Risk Level</p>
+              <p className="text-gray-800 capitalize">
+                {selectedOperation.riskLevel}
+              </p>
+            </div>
+            {selectedOperation.weatherConditions && (
+              <div>
+                <p className="text-sm font-medium text-gray-600">
+                  Weather Conditions
+                </p>
+                <p className="text-gray-800">
+                  {selectedOperation.weatherConditions}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-6 flex gap-2">
+            <button
+              onClick={() =>
+                handleGenerateReport(
+                  selectedOperation._id,
+                  "operations-summary"
+                )
+              }
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+            >
+              <FileText className="h-4 w-4" />
+              Generate Report
+            </button>
+            <button
+              onClick={() => setShowCommunication(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              <MessageSquare className="h-4 w-4" />
+              Send Message
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const VolunteerDetailsModal = () => {
+    if (!selectedVolunteer) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-semibold text-gray-900">
+              {selectedVolunteer.name}
+            </h3>
+            <button
+              onClick={() => setSelectedVolunteer(null)}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              <X className="h-6 w-6" />
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Status</p>
+              <span
+                className={`text-xs px-2 py-1 rounded ${
+                  selectedVolunteer.isAvailable
+                    ? "bg-green-100 text-green-800"
+                    : "bg-red-100 text-red-800"
+                }`}
+              >
+                {selectedVolunteer.isAvailable ? "Available" : "Busy"}
+              </span>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-600">Contact</p>
+              <p className="text-gray-800">
+                {selectedVolunteer.phone || "N/A"}
+              </p>
+              <p className="text-gray-800">{selectedVolunteer.email}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-600">Location</p>
+              <p className="text-gray-800">
+                {selectedVolunteer.location && selectedVolunteer.location.coordinates
+                  ? `${selectedVolunteer.location.coordinates[1]}, ${selectedVolunteer.location.coordinates[0]}`
+                  : "Location not set"}
+              </p>
+            </div>
+            {selectedVolunteer.skills?.length > 0 && (
+              <div>
+                <p className="text-sm font-medium text-gray-600">Skills</p>
+                <div className="flex flex-wrap gap-2">
+                  {selectedVolunteer.skills.map((skill, index) => (
+                    <span
+                      key={index}
+                      className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded"
+                    >
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {selectedVolunteer.assignedOperations?.length > 0 && (
+              <div>
+                <p className="text-sm font-medium text-gray-600">
+                  Assigned Operations
+                </p>
+                <div className="space-y-2">
+                  {selectedVolunteer.assignedOperations.map((op) => (
+                    <div
+                      key={op._id}
+                      className="text-sm text-gray-800 border-b border-gray-100 pb-1"
+                    >
+                      <span>{op.title}</span>
+                      <span
+                        className={`ml-2 text-xs ${getStatusColor(op.status)}`}
+                      >
+                        {op.status.toUpperCase()}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-6 flex gap-2">
+            <button
+              onClick={() => {
+                setNewMessage({
+                  ...newMessage,
+                  operationId: "",
+                  message: `Message to ${selectedVolunteer.name}: `,
+                });
+                setShowCommunication(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              <MessageSquare className="h-4 fin-w-4" />
+              Send Message
+            </button>
+            <button
+              onClick={() =>
+                handleGenerateReport(
+                  selectedVolunteer._id,
+                  "volunteer-performance"
+                )
+              }
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+            >
+              <FileText className="h-4 w-4" />
+              Generate Report
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const CreateOperationModal = () => {
+    if (!showCreateOperation) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-semibold text-gray-900">
+              Create New Operation
+            </h3>
+            <button
+              onClick={() => setShowCreateOperation(false)}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              <X className="h-6 w-6" />
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium text-gray-600">
+                Title *
               </label>
               <input
                 type="text"
@@ -1209,13 +1599,12 @@ const CoordinatorDashboard = () => {
                 onChange={(e) =>
                   setNewOperation({ ...newOperation, title: e.target.value })
                 }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 placeholder="Enter operation title"
               />
             </div>
-
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="text-sm font-medium text-gray-600">
                 Description *
               </label>
               <textarea
@@ -1226,15 +1615,14 @@ const CoordinatorDashboard = () => {
                     description: e.target.value,
                   })
                 }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 rows="4"
-                placeholder="Describe the operation details"
+                placeholder="Enter operation description"
               />
             </div>
-
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Location *
+              <label className="text-sm font-medium text-gray-600">
+                Location Name *
               </label>
               <input
                 type="text"
@@ -1242,102 +1630,247 @@ const CoordinatorDashboard = () => {
                 onChange={(e) =>
                   setNewOperation({
                     ...newOperation,
+                    location: { ...newOperation.location, name: e.target.value },
+                  })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                placeholder="Enter location name"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-600">
+                Address *
+              </label>
+              <input
+                type="text"
+                value={newOperation.location.address}
+                onChange={(e) =>
+                  setNewOperation({
+                    ...newOperation,
                     location: {
                       ...newOperation.location,
+                      address: e.target.value,
+                    },
+                  })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                placeholder="Enter address"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-gray-600">
+                  Latitude *
+                </label>
+                <input
+                  type="number"
+                  value={newOperation.location.coordinates.latitude}
+                  onChange={(e) =>
+                    setNewOperation({
+                      ...newOperation,
+                      location: {
+                        ...newOperation.location,
+                        coordinates: {
+                          ...newOperation.location.coordinates,
+                          latitude: parseFloat(e.target.value),
+                        },
+                      },
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  placeholder="Latitude"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-600">
+                  Longitude *
+                </label>
+                <input
+                  type="number"
+                  value={newOperation.location.coordinates.longitude}
+                  onChange={(e) =>
+                    setNewOperation({
+                      ...newOperation,
+                      location: {
+                        ...newOperation.location,
+                        coordinates: {
+                          ...newOperation.location.coordinates,
+                          longitude: parseFloat(e.target.value),
+                        },
+                      },
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  placeholder="Longitude"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-600">
+                Requester Name *
+              </label>
+              <input
+                type="text"
+                value={newOperation.requester.name}
+                onChange={(e) =>
+                  setNewOperation({
+                    ...newOperation,
+                    requester: {
+                      ...newOperation.requester,
                       name: e.target.value,
                     },
                   })
                 }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter location"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                placeholder="Enter requester name"
               />
             </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Priority
-                </label>
-                <select
-                  value={newOperation.priority}
-                  onChange={(e) =>
-                    setNewOperation({
-                      ...newOperation,
-                      priority: e.target.value,
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                  <option value="critical">Critical</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Risk Level
-                </label>
-                <select
-                  value={newOperation.riskLevel}
-                  onChange={(e) =>
-                    setNewOperation({
-                      ...newOperation,
-                      riskLevel: e.target.value,
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                  <option value="critical">Critical</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Estimated Duration (minutes)
-                </label>
-                <input
-                  type="number"
-                  value={newOperation.estimatedDuration}
-                  onChange={(e) =>
-                    setNewOperation({
-                      ...newOperation,
-                      estimatedDuration: parseInt(e.target.value) || 60,
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  min="15"
-                  step="15"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Team Size
-                </label>
-                <input
-                  type="number"
-                  value={newOperation.teamSize}
-                  onChange={(e) =>
-                    setNewOperation({
-                      ...newOperation,
-                      teamSize: parseInt(e.target.value) || 1,
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  min="1"
-                />
-              </div>
-            </div>
-
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="text-sm font-medium text-gray-600">
+                Requester Phone *
+              </label>
+              <input
+                type="text"
+                value={newOperation.requester.phone}
+                onChange={(e) =>
+                  setNewOperation({
+                    ...newOperation,
+                    requester: {
+                      ...newOperation.requester,
+                      phone: e.target.value,
+                    },
+                  })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                placeholder="Enter requester phone"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-600">
+                Type *
+              </label>
+              <select
+                value={newOperation.type}
+                onChange={(e) =>
+                  setNewOperation({ ...newOperation, type: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              >
+                <option value="">Select type</option>
+                <option value="emergency">Emergency</option>
+                <option value="routine">Routine</option>
+                <option value="training">Training</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-600">
+                Category *
+              </label>
+              <select
+                value={newOperation.category}
+                onChange={(e) =>
+                  setNewOperation({ ...newOperation, category: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              >
+                <option value="">Select category</option>
+                <option value="rescue">Rescue</option>
+                <option value="evacuation">Evacuation</option>
+                <option value="medical">Medical</option>
+                <option value="supply">Supply</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-600">
+                Priority
+              </label>
+              <select
+                value={newOperation.priority}
+                onChange={(e) =>
+                  setNewOperation({ ...newOperation, priority: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-600">
+                Estimated Duration (minutes)
+              </label>
+              <input
+                type="number"
+                value={newOperation.estimatedDuration}
+                onChange={(e) =>
+                  setNewOperation({
+                    ...newOperation,
+                    estimatedDuration: parseInt(e.target.value),
+                  })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                placeholder="Enter duration in minutes"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-600">
+                Team Size
+              </label>
+              <input
+                type="number"
+                value={newOperation.teamSize}
+                onChange={(e) =>
+                  setNewOperation({
+                    ...newOperation,
+                    teamSize: parseInt(e.target.value),
+                  })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                placeholder="Enter team size"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-600">
+                Required Skills
+              </label>
+              <input
+                type="text"
+                value={newOperation.requiredSkills.join(", ")}
+                onChange={(e) =>
+                  setNewOperation({
+                    ...newOperation,
+                    requiredSkills: e.target.value
+                      ? e.target.value.split(",").map((s) => s.trim())
+                      : [],
+                  })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                placeholder="Enter skills (comma-separated)"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-600">
+                Equipment
+              </label>
+              <input
+                type="text"
+                value={newOperation.equipment.join(", ")}
+                onChange={(e) =>
+                  setNewOperation({
+                    ...newOperation,
+                    equipment: e.target.value
+                      ? e.target.value.split(",").map((s) => s.trim())
+                      : [],
+                  })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                placeholder="Enter equipment (comma-separated)"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-600">
                 Weather Conditions
               </label>
               <input
@@ -1349,418 +1882,132 @@ const CoordinatorDashboard = () => {
                     weatherConditions: e.target.value,
                   })
                 }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="e.g., Clear, Rainy, Windy"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                placeholder="Enter weather conditions"
               />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-600">
+                Risk Level
+              </label>
+              <select
+                value={newOperation.riskLevel}
+                onChange={(e) =>
+                  setNewOperation({ ...newOperation, riskLevel: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+              </select>
             </div>
           </div>
 
-          <div className="flex gap-4 mt-6">
+          <div className="mt-6 flex gap-2">
             <button
               onClick={handleCreateOperation}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               disabled={isLoading}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
-              {isLoading ? "Creating..." : "Create Operation"}
+              <Save className="h-4 w-4" />
+              Create Operation
             </button>
             <button
               onClick={() => setShowCreateOperation(false)}
-              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
             >
+              <X className="h-4 w-4" />
               Cancel
             </button>
           </div>
         </div>
       </div>
-    </div>
-  );
-
-  const OperationDetailModal = ({ operation, onClose }) => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-semibold text-gray-900">
-              {operation.title}
-            </h3>
-            <button
-              onClick={onClose}
-              className="p-2 text-gray-400 hover:text-gray-600"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <div>
-                <h4 className="font-medium text-gray-900 mb-2">
-                  Operation Details
-                </h4>
-                <div className="space-y-2 text-sm">
-                  <p>
-                    <span className="font-medium">Status:</span>{" "}
-                    <span
-                      className={`px-2 py-1 rounded text-xs ${getStatusColor(
-                        operation.status
-                      )}`}
-                    >
-                      {operation.status}
-                    </span>
-                  </p>
-                  <p>
-                    <span className="font-medium">Priority:</span>{" "}
-                    <span className="capitalize">{operation.priority}</span>
-                  </p>
-                  <p>
-                    <span className="font-medium">Location:</span>{" "}
-                    {operation.location.name}
-                  </p>
-                  <p>
-                    <span className="font-medium">Duration:</span>{" "}
-                    {Math.floor(operation.estimatedDuration / 60)}h{" "}
-                    {operation.estimatedDuration % 60}m
-                  </p>
-                  <p>
-                    <span className="font-medium">Team Size:</span>{" "}
-                    {operation.teamSize}
-                  </p>
-                  <p>
-                    <span className="font-medium">Risk Level:</span>{" "}
-                    <span className="capitalize">{operation.riskLevel}</span>
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <h4 className="font-medium text-gray-900 mb-2">Description</h4>
-                <p className="text-sm text-gray-600">{operation.description}</p>
-              </div>
-
-              {operation.requiredSkills &&
-                operation.requiredSkills.length > 0 && (
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-2">
-                      Required Skills
-                    </h4>
-                    <div className="flex flex-wrap gap-2">
-                      {operation.requiredSkills.map((skill, index) => (
-                        <span
-                          key={index}
-                          className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded"
-                        >
-                          {skill}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <h4 className="font-medium text-gray-900 mb-2">
-                  Assigned Volunteers
-                </h4>
-                <div className="space-y-2">
-                  {operation.assignedVolunteers &&
-                  operation.assignedVolunteers.length > 0 ? (
-                    operation.assignedVolunteers.map((volunteer) => (
-                      <div
-                        key={volunteer.volunteerId || volunteer._id}
-                        className="flex items-center gap-2 p-2 bg-gray-50 rounded"
-                      >
-                        <div
-                          className={`w-2 h-2 rounded-full ${
-                            volunteer.isAvailable
-                              ? "bg-green-500"
-                              : "bg-red-500"
-                          }`}
-                        ></div>
-                        <span className="text-sm">
-                          {volunteer.volunteerId?.name ||
-                            volunteer.name ||
-                            "Unknown"}
-                        </span>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-gray-500">
-                      No volunteers assigned
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="font-medium text-gray-900 mb-2">Timeline</h4>
-                <div className="space-y-2 text-sm">
-                  <p>
-                    <span className="font-medium">Created:</span>{" "}
-                    {new Date(operation.createdAt).toLocaleString()}
-                  </p>
-                  {operation.startedAt && (
-                    <p>
-                      <span className="font-medium">Started:</span>{" "}
-                      {new Date(operation.startedAt).toLocaleString()}
-                    </p>
-                  )}
-                  {operation.completedAt && (
-                    <p>
-                      <span className="font-medium">Completed:</span>{" "}
-                      {new Date(operation.completedAt).toLocaleString()}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {operation.equipment && operation.equipment.length > 0 && (
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-2">Equipment</h4>
-                  <div className="space-y-1">
-                    {operation.equipment.map((item, index) => (
-                      <div key={index} className="text-sm text-gray-600">
-                        • {item}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {operation.weatherConditions && (
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-2">
-                    Weather Conditions
-                  </h4>
-                  <p className="text-sm text-gray-600">
-                    {operation.weatherConditions}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="flex gap-4 mt-6">
-            <button
-              onClick={() =>
-                handleGenerateReport(operation._id, "operations-summary")
-              }
-              className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-            >
-              Generate Report
-            </button>
-            <button
-              onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const VolunteerDetailModal = ({ volunteer, onClose }) => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-semibold text-gray-900">
-              {volunteer.name}
-            </h3>
-            <button
-              onClick={onClose}
-              className="p-2 text-gray-400 hover:text-gray-600"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <h4 className="font-medium text-gray-900 mb-2">Details</h4>
-              <div className="space-y-2 text-sm">
-                <p>
-                  <span className="font-medium">Status:</span>{" "}
-                  <span
-                    className={`px-2 py-1 rounded text-xs ${
-                      volunteer.isAvailable
-                        ? "bg-green-100 text-green-800"
-                        : "bg-red-100 text-red-800"
-                    }`}
-                  >
-                    {volunteer.isAvailable ? "Available" : "Busy"}
-                  </span>
-                </p>
-                <p>
-                  <span className="font-medium">Email:</span> {volunteer.email}
-                </p>
-                <p>
-                  <span className="font-medium">Phone:</span>{" "}
-                  {volunteer.phone || "N/A"}
-                </p>
-                <p>
-                  <span className="font-medium">Location:</span>{" "}
-                  {volunteer.location && volunteer.location.coordinates
-                    ? `${volunteer.location.coordinates[1]}, ${volunteer.location.coordinates[0]}`
-                    : "Not set"}
-                </p>
-              </div>
-            </div>
-
-            {volunteer.skills && volunteer.skills.length > 0 && (
-              <div>
-                <h4 className="font-medium text-gray-900 mb-2">Skills</h4>
-                <div className="flex flex-wrap gap-2">
-                  {volunteer.skills.map((skill, index) => (
-                    <span
-                      key={index}
-                      className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded"
-                    >
-                      {skill}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {volunteer.assignedOperations &&
-              volunteer.assignedOperations.length > 0 && (
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-2">
-                    Assigned Operations
-                  </h4>
-                  <div className="space-y-2">
-                    {volunteer.assignedOperations.map((op) => (
-                      <div
-                        key={op._id}
-                        className="p-2 bg-gray-50 rounded flex items-center justify-between"
-                      >
-                        <span className="text-sm">{op.title}</span>
-                        <span
-                          className={`px-2 py-1 rounded text-xs ${getStatusColor(
-                            op.status
-                          )}`}
-                        >
-                          {op.status}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-            <div>
-              <h4 className="font-medium text-gray-900 mb-2">Performance</h4>
-              <div className="space-y-2 text-sm">
-                <p>
-                  <span className="font-medium">Operations Completed:</span>{" "}
-                  {volunteer.completedOperations || 0}
-                </p>
-                <p>
-                  <span className="font-medium">Average Rating:</span>{" "}
-                  {volunteer.rating || "N/A"}
-                </p>
-                <p>
-                  <span className="font-medium">Last Active:</span>{" "}
-                  {volunteer.lastActive
-                    ? new Date(volunteer.lastActive).toLocaleString()
-                    : "N/A"}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex gap-4 mt-6">
-            <button
-              onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+    );
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+    <div className="min-h-screen bg-gray-100">
       {/* Header */}
-      <header className="bg-white shadow-sm sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <MapIcon className="h-8 w-8 text-blue-600" />
-            <h1 className="text-2xl font-bold text-gray-900">
-              Coordinator Dashboard
-            </h1>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <div
-                className={`w-3 h-3 rounded-full ${getWsStatusColor(wsStatus)}`}
-              ></div>
-              <span className="text-sm text-gray-600">
-                {getWsStatusText(wsStatus)}
-              </span>
-              {(wsStatus === "error" || wsStatus === "failed") && (
-                <button
-                  onClick={handleManualReconnect}
-                  className="text-blue-600 hover:underline text-sm"
-                >
-                  Reconnect
-                </button>
-              )}
+      <header className="bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <h1 className="text-2xl font-bold text-gray-900">
+                Coordinator Dashboard
+              </h1>
+              <div className="flex items-center gap-2">
+                <div
+                  className={`w-3 h-3 rounded-full ${getWsStatusColor(
+                    wsStatus
+                  )}`}
+                ></div>
+                <span className="text-sm text-gray-600">
+                  WebSocket: {getWsStatusText(wsStatus)}
+                </span>
+                {wsStatus !== "connected" && (
+                  <button
+                    onClick={handleManualReconnect}
+                    className="text-blue-600 hover:text-blue-800"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
             </div>
-
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input
-                type="checkbox"
-                checked={realTimeUpdates}
-                onChange={() => setRealTimeUpdates(!realTimeUpdates)}
-                className="h-4 w-4 text-blue-600 rounded"
-              />
-              Real-Time Updates
-            </label>
-
-            <button
-              onClick={() => setShowCreateOperation(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              New Operation
-            </button>
-
-            <button
-              onClick={handleLogout}
-              className="p-2 text-gray-600 hover:text-red-600 rounded-lg hover:bg-red-50"
-            >
-              <LogOut className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setRealTimeUpdates(!realTimeUpdates)}
+                className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg ${
+                  realTimeUpdates
+                    ? "bg-green-600 text-white"
+                    : "bg-gray-200 text-gray-600"
+                }`}
+              >
+                <Radio className="h-4 w-4" />
+                {realTimeUpdates ? "Real-time On" : "Real-time Off"}
+              </button>
+              <button
+                onClick={() => navigate("/settings")}
+                className="text-gray-600 hover:text-gray-800"
+              >
+                <Settings className="h-5 w-5" />
+              </button>
+              <button
+                onClick={handleLogout}
+                className="text-gray-600 hover:text-gray-800"
+              >
+                <LogOut className="h-5 w-5" />
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {error && (
-          <div className="mb-6 p-4 bg-red-100 text-red-800 rounded-lg flex items-center gap-2">
+          <div className="mb-4 p-4 bg-red-100 text-red-800 rounded-lg flex items-center gap-2">
             <AlertCircle className="h-5 w-5" />
             {error}
           </div>
         )}
-
         {success && (
-          <div className="mb-6 p-4 bg-green-100 text-green-800 rounded-lg flex items-center gap-2">
+          <div className="mb-4 p-4 bg-green-100 text-green-800 rounded-lg flex items-center gap-2">
             <CheckCircle className="h-5 w-5" />
             {success}
           </div>
         )}
 
+        {isLoading && (
+          <div className="flex justify-center items-center py-6">
+            <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
+          </div>
+        )}
+
         {/* Stats Overview */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <StatsCard
             title="Total Operations"
             value={stats.totalOperations}
@@ -1771,7 +2018,7 @@ const CoordinatorDashboard = () => {
           <StatsCard
             title="Active Operations"
             value={stats.activeOperations}
-            icon={Target}
+            icon={Zap}
             trend={-2}
             color="purple"
           />
@@ -1792,54 +2039,60 @@ const CoordinatorDashboard = () => {
         </div>
 
         {/* Tabs */}
-        <div className="mb-8">
+        <div className="mb-6">
           <div className="flex border-b border-gray-200">
-            {[
-              { id: "operations", label: "Operations", icon: MapPin },
-              { id: "volunteers", label: "Volunteers", icon: Users },
-              {
-                id: "communications",
-                label: "Communications",
-                icon: MessageSquare,
-              },
-              { id: "reports", label: "Reports", icon: BarChart3 },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-2 flex items-center gap-2 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === tab.id
-                    ? "border-blue-600 text-blue-600"
-                    : "border-transparent text-gray-600 hover:text-blue-600"
-                }`}
-              >
-                <tab.icon className="h-4 w-4" />
-                {tab.label}
-              </button>
-            ))}
+            {["operations", "volunteers", "communications", "reports"].map(
+              (tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 py-2 text-sm font-medium ${
+                    activeTab === tab
+                      ? "border-b-2 border-blue-600 text-blue-600"
+                      : "text-gray-600 hover:text-gray-800"
+                  }`}
+                >
+                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                </button>
+              )
+            )}
           </div>
         </div>
 
         {/* Operations Tab */}
         {activeTab === "operations" && (
-          <div>
-            <div className="flex flex-col sm:flex-row gap-4 mb-6">
-              <div className="flex-1 relative">
-                <Search className="h-5 w-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Search operations by title or location..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-900">
+                Operations
+              </h2>
+              <button
+                onClick={() => setShowCreateOperation(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <Plus className="h-4 w-4" />
+                Create Operation
+              </button>
+            </div>
 
-              <div className="flex gap-3">
+            <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-100 p-6">
+              <div className="flex flex-col md:flex-row gap-4 mb-6">
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="h-5 w-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder="Search operations..."
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+                </div>
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="px-3 py-2 border border-gray-300 rounded-lg"
                 >
                   <option value="all">All Statuses</option>
                   <option value="pending">Pending</option>
@@ -1848,11 +2101,10 @@ const CoordinatorDashboard = () => {
                   <option value="completed">Completed</option>
                   <option value="cancelled">Cancelled</option>
                 </select>
-
                 <select
                   value={priorityFilter}
                   onChange={(e) => setPriorityFilter(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="px-3 py-2 border border-gray-300 rounded-lg"
                 >
                   <option value="all">All Priorities</option>
                   <option value="low">Low</option>
@@ -1860,11 +2112,10 @@ const CoordinatorDashboard = () => {
                   <option value="high">High</option>
                   <option value="critical">Critical</option>
                 </select>
-
                 <select
                   value={dateFilter}
                   onChange={(e) => setDateFilter(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="px-3 py-2 border border-gray-300 rounded-lg"
                 >
                   <option value="all">All Dates</option>
                   <option value="today">Today</option>
@@ -1872,19 +2123,8 @@ const CoordinatorDashboard = () => {
                   <option value="month">This Month</option>
                 </select>
               </div>
-            </div>
 
-            {isLoading ? (
-              <div className="flex justify-center items-center py-10">
-                <RefreshCw className="h-8 w-8 text-blue-600 animate-spin" />
-              </div>
-            ) : filteredOperations.length === 0 ? (
-              <div className="text-center py-10">
-                <MapPin className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">No operations found.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredOperations.map((operation) => (
                   <EnhancedOperationCard
                     key={operation._id}
@@ -1892,7 +2132,7 @@ const CoordinatorDashboard = () => {
                   />
                 ))}
               </div>
-            )}
+            </div>
           </div>
         )}
 
@@ -1905,21 +2145,16 @@ const CoordinatorDashboard = () => {
         {/* Reports Tab */}
         {activeTab === "reports" && <ReportsPanel />}
 
-        {/* Modals */}
-        {showCreateOperation && <CreateOperationModal />}
-        {selectedOperation && (
-          <OperationDetailModal
-            operation={selectedOperation}
-            onClose={() => setSelectedOperation(null)}
-          />
-        )}
-        {selectedVolunteer && (
-          <VolunteerDetailModal
-            volunteer={selectedVolunteer}
-            onClose={() => setSelectedVolunteer(null)}
-          />
-        )}
+        {/* Notifications Panel */}
+        <div className="mt-6">
+          <NotificationPanel />
+        </div>
       </main>
+
+      {/* Modals */}
+      <OperationDetailsModal />
+      <VolunteerDetailsModal />
+      <CreateOperationModal />
     </div>
   );
 };

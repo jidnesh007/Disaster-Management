@@ -23,14 +23,23 @@ const userSchema = new mongoose.Schema(
       required: [true, "Password is required"],
       minlength: [6, "Password must be at least 6 characters"],
     },
-    role: {
-      type: String,
-      enum: ["admin", "coordinator", "volunteer", "citizen"],
-      default: "volunteer",
-    },
     phone: {
       type: String,
-      required: false,
+      required: [true, "Phone number is required"],
+      match: [/^\+?[\d\s-]{10,}$/, "Please enter a valid phone number"],
+    },
+    role: {
+      type: String,
+      enum: ["ADMIN", "COORDINATOR", "RESCUE_TEAM", "USER"],
+      default: "USER",
+    },
+    profile: {
+      avatar: { type: String, default: null },
+      address: { type: String },
+      city: { type: String },
+      state: { type: String },
+      pincode: { type: String },
+      emergencyMedicalInfo: { type: String },
     },
     location: {
       type: {
@@ -42,7 +51,14 @@ const userSchema = new mongoose.Schema(
         type: [Number],
         default: [0, 0],
       },
-      address: String,
+    },
+    preferences: {
+      notifications: {
+        email: { type: Boolean, default: true },
+        sms: { type: Boolean, default: true },
+        push: { type: Boolean, default: true },
+      },
+      language: { type: String, default: "en" },
     },
     isActive: {
       type: Boolean,
@@ -69,22 +85,25 @@ const userSchema = new mongoose.Schema(
     rating: {
       type: Number,
       default: 4.8,
+      min: 0,
+      max: 5,
     },
     level: {
       type: String,
-      default: "Expert",
+      enum: ["Beginner", "Intermediate", "Expert"],
+      default: "Beginner",
     },
     badges: {
       type: [String],
-      default: ["Quick Responder", "Life Saver"],
+      default: [],
     },
     totalHours: {
       type: Number,
-      default: 156,
+      default: 0,
+      min: 0,
     },
-    profilePicture: {
-      type: String,
-      default: null,
+    lastLogin: {
+      type: Date,
     },
     lastAvailabilityUpdate: {
       type: Date,
@@ -111,15 +130,22 @@ userSchema.pre("save", async function (next) {
   }
 });
 
+// Update updatedAt timestamp
+userSchema.pre("save", function (next) {
+  this.updatedAt = new Date();
+  next();
+});
+
 // Compare password method
 userSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
-// Remove password from JSON output
+// Remove sensitive fields from JSON output
 userSchema.methods.toJSON = function () {
   const userObject = this.toObject();
   delete userObject.password;
+  delete userObject.__v;
   return userObject;
 };
 

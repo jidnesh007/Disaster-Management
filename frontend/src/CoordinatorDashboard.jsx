@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   MapPin,
@@ -54,6 +54,14 @@ import {
   Battery,
   Signal,
 } from "lucide-react";
+
+const debounce = (func, delay) => {
+  let timeoutId;
+  return (...args) => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => func(...args), delay);
+  };
+};
 
 const CoordinatorDashboard = () => {
   const navigate = useNavigate();
@@ -115,12 +123,12 @@ const CoordinatorDashboard = () => {
     priority: "normal",
   });
 
-  // WebSocket refs and state
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const retryCountRef = useRef(0);
   const isConnectingRef = useRef(false);
   const [wsStatus, setWsStatus] = useState("disconnected");
+  const titleInputRef = useRef(null);
 
   const MAX_RETRIES = 3;
   const API_BASE_URL = "http://localhost:3000";
@@ -154,21 +162,32 @@ const CoordinatorDashboard = () => {
     try {
       switch (data.type) {
         case "OPERATION_UPDATE":
-          setOperations((prev) =>
-            prev.map((op) =>
+          setOperations((prev) => {
+            const updated = prev.map((op) =>
               op._id === data.operationId ? { ...op, ...data.updates } : op
-            )
-          );
+            );
+            return JSON.stringify(prev) !== JSON.stringify(updated)
+              ? updated
+              : prev;
+          });
           break;
         case "VOLUNTEER_STATUS":
-          setVolunteers((prev) =>
-            prev.map((vol) =>
+          setVolunteers((prev) => {
+            const updated = prev.map((vol) =>
               vol._id === data.volunteerId ? { ...vol, ...data.updates } : vol
-            )
-          );
+            );
+            return JSON.stringify(prev) !== JSON.stringify(updated)
+              ? updated
+              : prev;
+          });
           break;
         case "NEW_NOTIFICATION":
-          setNotifications((prev) => [data.notification, ...prev.slice(0, 9)]);
+          setNotifications((prev) => {
+            const updated = [data.notification, ...prev.slice(0, 9)];
+            return JSON.stringify(prev) !== JSON.stringify(updated)
+              ? updated
+              : prev;
+          });
           break;
         default:
           console.log("Unknown message type:", data.type);
@@ -364,12 +383,36 @@ const CoordinatorDashboard = () => {
         notificationsRes.json(),
       ]);
 
-      setOperations(operationsData.data || []);
-      setVolunteers(volunteersData.data || []);
-      setCommunications(communicationsData.data || []);
-      setReports(reportsData.data || []);
-      setStats(statsData.data || stats);
-      setNotifications(notificationsData.data || []);
+      setOperations((prev) =>
+        JSON.stringify(prev) !== JSON.stringify(operationsData.data || [])
+          ? operationsData.data || []
+          : prev
+      );
+      setVolunteers((prev) =>
+        JSON.stringify(prev) !== JSON.stringify(volunteersData.data || [])
+          ? volunteersData.data || []
+          : prev
+      );
+      setCommunications((prev) =>
+        JSON.stringify(prev) !== JSON.stringify(communicationsData.data || [])
+          ? communicationsData.data || []
+          : prev
+      );
+      setReports((prev) =>
+        JSON.stringify(prev) !== JSON.stringify(reportsData.data || [])
+          ? reportsData.data || []
+          : prev
+      );
+      setStats((prev) =>
+        JSON.stringify(prev) !== JSON.stringify(statsData.data || stats)
+          ? statsData.data || stats
+          : prev
+      );
+      setNotifications((prev) =>
+        JSON.stringify(prev) !== JSON.stringify(notificationsData.data || [])
+          ? notificationsData.data || []
+          : prev
+      );
     } catch (err) {
       console.error("Fetch error:", err);
       setError(`Failed to fetch data: ${err.message}. Please try again.`);
@@ -384,15 +427,9 @@ const CoordinatorDashboard = () => {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  const handleCreateOperation = async () => {
-    const {
-      title,
-      description,
-      location,
-      requester,
-      type,
-      category,
-    } = newOperation;
+  const handleCreateOperation = useCallback(async () => {
+    const { title, description, location, requester, type, category } =
+      newOperation;
 
     if (
       !title ||
@@ -414,9 +451,7 @@ const CoordinatorDashboard = () => {
 
     const validCategories = ["rescue", "evacuation", "medical", "supply"];
     if (!validCategories.includes(category)) {
-      setError(
-        `Category must be one of: ${validCategories.join(", ")}`
-      );
+      setError(`Category must be one of: ${validCategories.join(", ")}`);
       return;
     }
 
@@ -440,7 +475,7 @@ const CoordinatorDashboard = () => {
       const data = await response.json();
 
       if (data.success) {
-        setOperations([...operations, data.data]);
+        setOperations((prev) => [...prev, data.data]);
         setShowCreateOperation(false);
         setNewOperation({
           title: "",
@@ -474,48 +509,43 @@ const CoordinatorDashboard = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [newOperation, API_BASE_URL]);
 
-  const handleUpdateOperationStatus = async (operationId, newStatus) => {
-    try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(
-        `${API_BASE_URL}/api/coordinator/operations/${operationId}/status`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ status: newStatus }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (data.success) {
-        setOperations(
-          operations.map((op) =>
-            op._id === operationId ? { ...op, status: newStatus } : op
-          )
+  const handleUpdateOperationStatus = useCallback(
+    async (operationId, newStatus) => {
+      try {
+        const token = localStorage.getItem("token");
+        const response = await fetch(
+          `${API_BASE_URL}/api/coordinator/operations/${operationId}/status`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ status: newStatus }),
+          }
         );
-        setSuccess(`Operation status updated to ${newStatus}`);
-        setTimeout(() => setSuccess(""), 3000);
-      } else {
-        setError(data.message || "Failed to update operation status");
-      }
-    } catch (err) {
-      setError("Network error updating operation status");
-    }
-  };
 
-  const debounce = (func, delay) => {
-    let timeoutId;
-    return (...args) => {
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => func(...args), delay);
-    };
-  };
+        const data = await response.json();
+
+        if (data.success) {
+          setOperations((prev) =>
+            prev.map((op) =>
+              op._id === operationId ? { ...op, status: newStatus } : op
+            )
+          );
+          setSuccess(`Operation status updated to ${newStatus}`);
+          setTimeout(() => setSuccess(""), 3000);
+        } else {
+          setError(data.message || "Failed to update operation status");
+        }
+      } catch (err) {
+        setError("Network error updating operation status");
+      }
+    },
+    [API_BASE_URL]
+  );
 
   const debouncedAssignVolunteer = useCallback(
     debounce(async (operationId, volunteerId) => {
@@ -541,13 +571,10 @@ const CoordinatorDashboard = () => {
         const data = await response.json();
 
         if (data.success) {
-          setOperations(
-            operations.map((op) =>
+          setOperations((prev) =>
+            prev.map((op) =>
               op._id === operationId
-                ? {
-                    ...op,
-                    assignedVolunteers: data.data.assignedVolunteers,
-                  }
+                ? { ...op, assignedVolunteers: data.data.assignedVolunteers }
                 : op
             )
           );
@@ -562,14 +589,17 @@ const CoordinatorDashboard = () => {
         setIsLoading(false);
       }
     }, 500),
-    [operations, API_BASE_URL]
+    [API_BASE_URL]
   );
 
-  const handleAssignVolunteer = (operationId, volunteerId) => {
-    debouncedAssignVolunteer(operationId, volunteerId);
-  };
+  const handleAssignVolunteer = useCallback(
+    (operationId, volunteerId) => {
+      debouncedAssignVolunteer(operationId, volunteerId);
+    },
+    [debouncedAssignVolunteer]
+  );
 
-  const handleSendMessage = async () => {
+  const handleSendMessage = useCallback(async () => {
     if (!newMessage.message || !newMessage.operationId) {
       setError("Please fill in all message fields");
       return;
@@ -600,7 +630,7 @@ const CoordinatorDashboard = () => {
       const data = await response.json();
 
       if (data.success) {
-        setCommunications([data.data, ...communications]);
+        setCommunications((prev) => [data.data, ...prev]);
         setNewMessage({
           operationId: "",
           message: "",
@@ -615,49 +645,52 @@ const CoordinatorDashboard = () => {
     } catch (err) {
       setError(`Network error sending message: ${err.message}`);
     }
-  };
+  }, [newMessage, operations, API_BASE_URL]);
 
-  const handleGenerateReport = async (operationId, reportType) => {
-    const validReportTypes = [
-      "operations-summary",
-      "volunteer-performance",
-      "resource-utilization",
-      "monthly-analytics",
-    ];
-    if (!validReportTypes.includes(reportType)) {
-      setError(`Invalid report type: ${reportType}`);
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(
-        `${API_BASE_URL}/api/coordinator/reports/generate`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ operationId, reportType }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (data.success) {
-        setReports([data.data, ...reports]);
-        setSuccess("Report generated successfully");
-        setTimeout(() => setSuccess(""), 3000);
-      } else {
-        setError(data.message || "Failed to generate report");
+  const handleGenerateReport = useCallback(
+    async (operationId, reportType) => {
+      const validReportTypes = [
+        "operations-summary",
+        "volunteer-performance",
+        "resource-utilization",
+        "monthly-analytics",
+      ];
+      if (!validReportTypes.includes(reportType)) {
+        setError(`Invalid report type: ${reportType}`);
+        return;
       }
-    } catch (err) {
-      setError("Network error generating report");
-    }
-  };
 
-  const handleLogout = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const response = await fetch(
+          `${API_BASE_URL}/api/coordinator/reports/generate`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ operationId, reportType }),
+          }
+        );
+
+        const data = await response.json();
+
+        if (data.success) {
+          setReports((prev) => [data.data, ...prev]);
+          setSuccess("Report generated successfully");
+          setTimeout(() => setSuccess(""), 3000);
+        } else {
+          setError(data.message || "Failed to generate report");
+        }
+      } catch (err) {
+        setError("Network error generating report");
+      }
+    },
+    [API_BASE_URL]
+  );
+
+  const handleLogout = useCallback(async () => {
     if (!window.confirm("Are you sure you want to log out?")) return;
 
     try {
@@ -674,12 +707,26 @@ const CoordinatorDashboard = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     navigate("/");
-  };
+  }, [navigate, cleanupWebSocket, API_BASE_URL]);
 
-  const handleManualReconnect = () => {
+  const handleManualReconnect = useCallback(() => {
     retryCountRef.current = 0;
     connectWebSocket();
-  };
+  }, [connectWebSocket]);
+
+  const debouncedSetSearchTerm = useCallback(
+    debounce((value) => {
+      setSearchTerm(value);
+    }, 300),
+    []
+  );
+
+  const handleSearchChange = useCallback(
+    (e) => {
+      debouncedSetSearchTerm(e.target.value);
+    },
+    [debouncedSetSearchTerm]
+  );
 
   const filteredOperations = operations.filter((op) => {
     const matchesStatus = statusFilter === "all" || op.status === statusFilter;
@@ -774,238 +821,272 @@ const CoordinatorDashboard = () => {
     }
   };
 
-  const StatsCard = ({ title, value, icon: Icon, trend, color = "blue" }) => (
-    <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-100 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-gray-600">{title}</p>
-          <p className={`text-2xl font-bold text-${color}-600`}>{value}</p>
-          {trend && (
-            <p
-              className={`text-xs ${
-                trend > 0 ? "text-green-600" : "text-red-600"
-              }`}
-            >
-              {trend > 0 ? "+" : ""}
-              {trend}% from last week
-            </p>
-          )}
+  const StatsCard = memo(
+    ({ title, value, icon: Icon, trend, color = "blue" }) => (
+      <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-gray-600">{title}</p>
+            <p className={`text-2xl font-bold text-${color}-600`}>{value}</p>
+            {trend && (
+              <p
+                className={`text-xs ${
+                  trend > 0 ? "text-green-600" : "text-red-600"
+                }`}
+              >
+                {trend > 0 ? "+" : ""}
+                {trend}% from last week
+              </p>
+            )}
+          </div>
+          <Icon className={`h-8 w-8 text-${color}-600`} />
         </div>
-        <Icon className={`h-8 w-8 text-${color}-600`} />
       </div>
-    </div>
+    )
   );
 
-  const EnhancedOperationCard = ({ operation }) => (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-lg transition-all">
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-2">
-            <div
-              className={`w-3 h-3 rounded-full ${getPriorityColor(
-                operation.priority
-              )} animate-pulse`}
-            ></div>
-            <h3 className="font-semibold text-gray-900 text-lg">
-              {operation.title}
-            </h3>
-            <span
-              className={`px-3 py-1 text-xs rounded-full font-medium ${getStatusColor(
-                operation.status
-              )}`}
+  const EnhancedOperationCard = memo(({ operation }) => {
+    const handleStatusChange = useCallback(
+      (e) => handleUpdateOperationStatus(operation._id, e.target.value),
+      [operation._id]
+    );
+
+    const handleVolunteerAssign = useCallback(
+      (e) => handleAssignVolunteer(operation._id, e.target.value),
+      [operation._id]
+    );
+
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-lg transition-all">
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-2">
+              <div
+                className={`w-3 h-3 rounded-full ${getPriorityColor(
+                  operation.priority
+                )} animate-pulse`}
+              ></div>
+              <h3 className="font-semibold text-gray-900 text-lg">
+                {operation.title}
+              </h3>
+              <span
+                className={`px-3 py-1 text-xs rounded-full font-medium ${getStatusColor(
+                  operation.status
+                )}`}
+              >
+                {operation.status.replace("-", " ").toUpperCase()}
+              </span>
+            </div>
+            <p className="text-gray-600 text-sm mb-3 line-clamp-2">
+              {operation.description}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setSelectedOperation(operation)}
+              className="p-2 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50"
+              aria-label="View operation details"
             >
-              {operation.status.replace("-", " ").toUpperCase()}
+              <Eye className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() =>
+                handleGenerateReport(operation._id, "operations-summary")
+              }
+              className="p-2 text-gray-400 hover:text-green-600 rounded-lg hover:bg-green-50"
+              aria-label="Generate report"
+            >
+              <FileText className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-3 mb-4">
+          <div className="flex items-center text-sm text-gray-600">
+            <MapPin className="h-4 w-4 mr-2 text-blue-500" />
+            <span className="font-medium">{operation.location.name}</span>
+          </div>
+          <div className="flex items-center text-sm text-gray-600">
+            <Timer className="h-4 w-4 mr-2 text-purple-500" />
+            <span>
+              {Math.floor(operation.estimatedDuration / 60)}h{" "}
+              {operation.estimatedDuration % 60}m
             </span>
           </div>
-          <p className="text-gray-600 text-sm mb-3 line-clamp-2">
-            {operation.description}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setSelectedOperation(operation)}
-            className="p-2 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50"
-            aria-label="View operation details"
-          >
-            <Eye className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() =>
-              handleGenerateReport(operation._id, "operations-summary")
-            }
-            className="p-2 text-gray-400 hover:text-green-600 rounded-lg hover:bg-green-50"
-            aria-label="Generate report"
-          >
-            <FileText className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-
-      <div className="space-y-3 mb-4">
-        <div className="flex items-center text-sm text-gray-600">
-          <MapPin className="h-4 w-4 mr-2 text-blue-500" />
-          <span className="font-medium">{operation.location.name}</span>
-        </div>
-        <div className="flex items-center text-sm text-gray-600">
-          <Timer className="h-4 w-4 mr-2 text-purple-500" />
-          <span>
-            {Math.floor(operation.estimatedDuration / 60)}h{" "}
-            {operation.estimatedDuration % 60}m
-          </span>
-        </div>
-        <div className="flex items-center text-sm text-gray-600">
-          <Users className="h-4 w-4 mr-2 text-green-500" />
-          <span>Team of {operation.teamSize}</span>
-        </div>
-        {operation.riskLevel && (
           <div className="flex items-center text-sm text-gray-600">
-            <Shield className="h-4 w-4 mr-2 text-orange-500" />
-            <span className="capitalize">{operation.riskLevel} Risk</span>
+            <Users className="h-4 w-4 mr-2 text-green-500" />
+            <span>Team of {operation.teamSize}</span>
           </div>
-        )}
-      </div>
-
-      <div className="flex gap-2 mb-4">
-        <select
-          onChange={(e) => handleAssignVolunteer(operation._id, e.target.value)}
-          className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg"
-          defaultValue=""
-          disabled={isLoading}
-        >
-          <option value="">Assign Volunteer</option>
-          {volunteers
-            .filter((v) => v.isAvailable)
-            .map((v) => (
-              <option key={v._id} value={v._id}>
-                {v.name}
-              </option>
-            ))}
-        </select>
-      </div>
-
-      <div className="flex gap-2">
-        <select
-          onChange={(e) =>
-            handleUpdateOperationStatus(operation._id, e.target.value)
-          }
-          className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg"
-          defaultValue={operation.status}
-        >
-          <option value="pending">Pending</option>
-          <option value="active">Active</option>
-          <option value="in-progress">In Progress</option>
-          <option value="completed">Completed</option>
-          <option value="cancelled">Cancelled</option>
-        </select>
-      </div>
-    </div>
-  );
-
-  const CommunicationPanel = () => (
-    <div className="space-y-6">
-      <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-100 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          Send Message
-        </h3>
-        <div className="space-y-4">
-          <select
-            value={newMessage.operationId}
-            onChange={(e) =>
-              setNewMessage({ ...newMessage, operationId: e.target.value })
-            }
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-          >
-            <option value="">Select Operation</option>
-            {operations.map((op) => (
-              <option key={op._id} value={op._id}>
-                {op.title}
-              </option>
-            ))}
-          </select>
-
-          <div className="flex gap-4">
-            <select
-              value={newMessage.type}
-              onChange={(e) =>
-                setNewMessage({ ...newMessage, type: e.target.value })
-              }
-              className="px-3 py-2 border border-gray-300 rounded-lg"
-            >
-              <option value="update">Update</option>
-              <option value="alert">Alert</option>
-              <option value="instruction">Instruction</option>
-              <option value="notification">Notification</option>
-            </select>
-
-            <select
-              value={newMessage.priority}
-              onChange={(e) =>
-                setNewMessage({ ...newMessage, priority: e.target.value })
-              }
-              className="px-3 py-2 border border-gray-300 rounded-lg"
-            >
-              <option value="normal">Normal</option>
-              <option value="high">High</option>
-              <option value="urgent">Urgent</option>
-            </select>
-          </div>
-
-          <textarea
-            value={newMessage.message}
-            onChange={(e) =>
-              setNewMessage({ ...newMessage, message: e.target.value })
-            }
-            placeholder="Enter your message..."
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-            rows="4"
-          />
-
-          <button
-            onClick={handleSendMessage}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            <Send className="h-4 w-4" />
-            Send Message
-          </button>
-        </div>
-      </div>
-
-      <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-100 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          Recent Communications
-        </h3>
-        <div className="space-y-4 max-h-96 overflow-y-auto">
-          {communications.map((comm) => (
-            <div
-              key={comm._id}
-              className="border border-gray-200 rounded-lg p-4"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span
-                  className={`px-2 py-1 text-xs rounded ${getPriorityColor(
-                    comm.priority
-                  )} text-white`}
-                >
-                  {comm.type.toUpperCase()}
-                </span>
-                <span className="text-xs text-gray-500">
-                  {new Date(comm.createdAt).toLocaleString()}
-                </span>
-              </div>
-              <p className="text-gray-800 mb-2">{comm.message}</p>
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                <span>Operation: {comm.operationTitle || "General"}</span>
-                <span>•</span>
-                <span>Status: {comm.status || "Sent"}</span>
-              </div>
+          {operation.riskLevel && (
+            <div className="flex items-center text-sm text-gray-600">
+              <Shield className="h-4 w-4 mr-2 text-orange-500" />
+              <span className="capitalize">{operation.riskLevel} Risk</span>
             </div>
-          ))}
+          )}
+        </div>
+
+        <div className="flex gap-2 mb-4">
+          <select
+            onChange={handleVolunteerAssign}
+            className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg"
+            defaultValue=""
+            disabled={isLoading}
+          >
+            <option value="">Assign Volunteer</option>
+            {volunteers
+              .filter((v) => v.isAvailable)
+              .map((v) => (
+                <option key={v._id} value={v._id}>
+                  {v.name}
+                </option>
+              ))}
+          </select>
+        </div>
+
+        <div className="flex gap-2">
+          <select
+            onChange={handleStatusChange}
+            className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg"
+            value={operation.status}
+          >
+            <option value="pending">Pending</option>
+            <option value="active">Active</option>
+            <option value="in-progress">In Progress</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
         </div>
       </div>
-    </div>
-  );
+    );
+  });
 
-  const VolunteerManagementPanel = () => (
+  const CommunicationPanel = memo(() => {
+    const handleOperationChange = useCallback(
+      (e) =>
+        setNewMessage((prev) => ({ ...prev, operationId: e.target.value })),
+      []
+    );
+
+    const handleTypeChange = useCallback(
+      (e) => setNewMessage((prev) => ({ ...prev, type: e.target.value })),
+      []
+    );
+
+    const handlePriorityChange = useCallback(
+      (e) => setNewMessage((prev) => ({ ...prev, priority: e.target.value })),
+      []
+    );
+
+    const debouncedSetMessage = useCallback(
+      debounce((value) => {
+        setNewMessage((prev) => ({ ...prev, message: value }));
+      }, 300),
+      []
+    );
+
+    const handleMessageChange = useCallback(
+      (e) => debouncedSetMessage(e.target.value),
+      [debouncedSetMessage]
+    );
+
+    return (
+      <div className="space-y-6">
+        <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-100 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            Send Message
+          </h3>
+          <div className="space-y-4">
+            <select
+              value={newMessage.operationId}
+              onChange={handleOperationChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            >
+              <option value="">Select Operation</option>
+              {operations.map((op) => (
+                <option key={op._id} value={op._id}>
+                  {op.title}
+                </option>
+              ))}
+            </select>
+
+            <div className="flex gap-4">
+              <select
+                value={newMessage.type}
+                onChange={handleTypeChange}
+                className="px-3 py-2 border border-gray-300 rounded-lg"
+              >
+                <option value="update">Update</option>
+                <option value="alert">Alert</option>
+                <option value="instruction">Instruction</option>
+                <option value="notification">Notification</option>
+              </select>
+
+              <select
+                value={newMessage.priority}
+                onChange={handlePriorityChange}
+                className="px-3 py-2 border border-gray-300 rounded-lg"
+              >
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+              </select>
+            </div>
+
+            <textarea
+              value={newMessage.message}
+              onChange={handleMessageChange}
+              placeholder="Enter your message..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              rows="4"
+            />
+
+            <button
+              onClick={handleSendMessage}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              <Send className="h-4 w-4" />
+              Send Message
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-100 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            Recent Communications
+          </h3>
+          <div className="space-y-4 max-h-96 overflow-y-auto">
+            {communications.map((comm) => (
+              <div
+                key={comm._id}
+                className="border border-gray-200 rounded-lg p-4"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span
+                    className={`px-2 py-1 text-xs rounded ${getPriorityColor(
+                      comm.priority
+                    )} text-white`}
+                  >
+                    {comm.type.toUpperCase()}
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {new Date(comm.createdAt).toLocaleString()}
+                  </span>
+                </div>
+                <p className="text-gray-800 mb-2">{comm.message}</p>
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <span>Operation: {comm.operationTitle || "General"}</span>
+                  <span>•</span>
+                  <span>Status: {comm.status || "Sent"}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  });
+
+  const VolunteerManagementPanel = memo(() => (
     <div className="space-y-6">
       <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-100 p-6">
         <div className="flex items-center justify-between mb-4">
@@ -1111,9 +1192,9 @@ const CoordinatorDashboard = () => {
         </div>
       </div>
     </div>
-  );
+  ));
 
-  const ReportsPanel = () => (
+  const ReportsPanel = memo(() => (
     <div className="space-y-6">
       <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-100 p-6">
         <div className="flex items-center justify-between mb-4">
@@ -1188,7 +1269,7 @@ const CoordinatorDashboard = () => {
         </div>
 
         <div className="space-y-4">
-                    <h4 className="text-md font-semibold text-gray-900 mb-2">
+          <h4 className="text-md font-semibold text-gray-900 mb-2">
             Recent Reports
           </h4>
           <div className="space-y-4 max-h-96 overflow-y-auto">
@@ -1229,41 +1310,44 @@ const CoordinatorDashboard = () => {
         </div>
       </div>
     </div>
+  ));
+
+  const handleDownloadReport = useCallback(
+    async (reportId) => {
+      try {
+        const token = localStorage.getItem("token");
+        const response = await fetch(
+          `${API_BASE_URL}/api/coordinator/reports/${reportId}/download`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to download report");
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `report-${reportId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        setSuccess("Report downloaded successfully");
+        setTimeout(() => setSuccess(""), 3000);
+      } catch (err) {
+        setError(`Error downloading report: ${err.message}`);
+      }
+    },
+    [API_BASE_URL]
   );
 
-  const handleDownloadReport = async (reportId) => {
-    try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(
-        `${API_BASE_URL}/api/coordinator/reports/${reportId}/download`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to download report");
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `report-${reportId}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-      setSuccess("Report downloaded successfully");
-      setTimeout(() => setSuccess(""), 3000);
-    } catch (err) {
-      setError(`Error downloading report: ${err.message}`);
-    }
-  };
-
-  const NotificationPanel = () => (
+  const NotificationPanel = memo(() => (
     <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-100 p-6">
       <h3 className="text-lg font-semibold text-gray-900 mb-4">
         Notifications
@@ -1297,9 +1381,9 @@ const CoordinatorDashboard = () => {
         ))}
       </div>
     </div>
-  );
+  ));
 
-  const OperationDetailsModal = () => {
+  const OperationDetailsModal = memo(() => {
     if (!selectedOperation) return null;
 
     return (
@@ -1450,9 +1534,9 @@ const CoordinatorDashboard = () => {
         </div>
       </div>
     );
-  };
+  });
 
-  const VolunteerDetailsModal = () => {
+  const VolunteerDetailsModal = memo(() => {
     if (!selectedVolunteer) return null;
 
     return (
@@ -1493,7 +1577,8 @@ const CoordinatorDashboard = () => {
             <div>
               <p className="text-sm font-medium text-gray-600">Location</p>
               <p className="text-gray-800">
-                {selectedVolunteer.location && selectedVolunteer.location.coordinates
+                {selectedVolunteer.location &&
+                selectedVolunteer.location.coordinates
                   ? `${selectedVolunteer.location.coordinates[1]}, ${selectedVolunteer.location.coordinates[0]}`
                   : "Location not set"}
               </p>
@@ -1549,7 +1634,7 @@ const CoordinatorDashboard = () => {
               }}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
-              <MessageSquare className="h-4 fin-w-4" />
+              <MessageSquare className="h-4 w-4" />
               Send Message
             </button>
             <button
@@ -1568,9 +1653,150 @@ const CoordinatorDashboard = () => {
         </div>
       </div>
     );
-  };
+  });
 
-  const CreateOperationModal = () => {
+  const CreateOperationModal = memo(() => {
+    useEffect(() => {
+      if (showCreateOperation && titleInputRef.current) {
+        titleInputRef.current.focus();
+      }
+    }, [showCreateOperation]);
+
+    const debouncedSetNewOperation = useCallback(
+      debounce((updates) => {
+        setNewOperation((prev) => ({ ...prev, ...updates }));
+      }, 300),
+      []
+    );
+
+    const handleTitleChange = useCallback(
+      (e) => debouncedSetNewOperation({ title: e.target.value }),
+      [debouncedSetNewOperation]
+    );
+
+    const handleDescriptionChange = useCallback(
+      (e) => debouncedSetNewOperation({ description: e.target.value }),
+      [debouncedSetNewOperation]
+    );
+
+    const handleLocationNameChange = useCallback(
+      (e) =>
+        debouncedSetNewOperation({
+          location: { ...newOperation.location, name: e.target.value },
+        }),
+      [debouncedSetNewOperation, newOperation.location]
+    );
+
+    const handleAddressChange = useCallback(
+      (e) =>
+        debouncedSetNewOperation({
+          location: { ...newOperation.location, address: e.target.value },
+        }),
+      [debouncedSetNewOperation, newOperation.location]
+    );
+
+    const handleLatitudeChange = useCallback(
+      (e) =>
+        debouncedSetNewOperation({
+          location: {
+            ...newOperation.location,
+            coordinates: {
+              ...newOperation.location.coordinates,
+              latitude: parseFloat(e.target.value),
+            },
+          },
+        }),
+      [debouncedSetNewOperation, newOperation.location]
+    );
+
+    const handleLongitudeChange = useCallback(
+      (e) =>
+        debouncedSetNewOperation({
+          location: {
+            ...newOperation.location,
+            coordinates: {
+              ...newOperation.location.coordinates,
+              longitude: parseFloat(e.target.value),
+            },
+          },
+        }),
+      [debouncedSetNewOperation, newOperation.location]
+    );
+
+    const handleRequesterNameChange = useCallback(
+      (e) =>
+        debouncedSetNewOperation({
+          requester: { ...newOperation.requester, name: e.target.value },
+        }),
+      [debouncedSetNewOperation, newOperation.requester]
+    );
+
+    const handleRequesterPhoneChange = useCallback(
+      (e) =>
+        debouncedSetNewOperation({
+          requester: { ...newOperation.requester, phone: e.target.value },
+        }),
+      [debouncedSetNewOperation, newOperation.requester]
+    );
+
+    const handleTypeChange = useCallback(
+      (e) => debouncedSetNewOperation({ type: e.target.value }),
+      [debouncedSetNewOperation]
+    );
+
+    const handleCategoryChange = useCallback(
+      (e) => debouncedSetNewOperation({ category: e.target.value }),
+      [debouncedSetNewOperation]
+    );
+
+    const handlePriorityChange = useCallback(
+      (e) => debouncedSetNewOperation({ priority: e.target.value }),
+      [debouncedSetNewOperation]
+    );
+
+    const handleDurationChange = useCallback(
+      (e) =>
+        debouncedSetNewOperation({
+          estimatedDuration: parseInt(e.target.value),
+        }),
+      [debouncedSetNewOperation]
+    );
+
+    const handleTeamSizeChange = useCallback(
+      (e) => debouncedSetNewOperation({ teamSize: parseInt(e.target.value) }),
+      [debouncedSetNewOperation]
+    );
+
+    const handleSkillsChange = useCallback(
+      (e) =>
+        debouncedSetNewOperation({
+          requiredSkills: e.target.value
+            ? e.target.value.split(",").map((s) => s.trim())
+            : [],
+        }),
+      [debouncedSetNewOperation]
+    );
+
+    const handleEquipmentChange = useCallback(
+      (e) =>
+        debouncedSetNewOperation({
+          equipment: e.target.value
+            ? e.target.value.split(",").map((s) => s.trim())
+            : [],
+        }),
+      [debouncedSetNewOperation]
+    );
+
+    const handleWeatherChange = useCallback(
+      (e) => debouncedSetNewOperation({ weatherConditions: e.target.value }),
+      [debouncedSetNewOperation]
+    );
+
+    const handleRiskLevelChange = useCallback(
+      (e) => debouncedSetNewOperation({ riskLevel: e.target.value }),
+      [debouncedSetNewOperation]
+    );
+
     if (!showCreateOperation) return null;
 
     return (
@@ -1594,11 +1820,10 @@ const CoordinatorDashboard = () => {
                 Title *
               </label>
               <input
+                ref={titleInputRef}
                 type="text"
                 value={newOperation.title}
-                onChange={(e) =>
-                  setNewOperation({ ...newOperation, title: e.target.value })
-                }
+                onChange={handleTitleChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 placeholder="Enter operation title"
               />
@@ -1609,12 +1834,7 @@ const CoordinatorDashboard = () => {
               </label>
               <textarea
                 value={newOperation.description}
-                onChange={(e) =>
-                  setNewOperation({
-                    ...newOperation,
-                    description: e.target.value,
-                  })
-                }
+                onChange={handleDescriptionChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 rows="4"
                 placeholder="Enter operation description"
@@ -1627,12 +1847,7 @@ const CoordinatorDashboard = () => {
               <input
                 type="text"
                 value={newOperation.location.name}
-                onChange={(e) =>
-                  setNewOperation({
-                    ...newOperation,
-                    location: { ...newOperation.location, name: e.target.value },
-                  })
-                }
+                onChange={handleLocationNameChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 placeholder="Enter location name"
               />
@@ -1644,15 +1859,7 @@ const CoordinatorDashboard = () => {
               <input
                 type="text"
                 value={newOperation.location.address}
-                onChange={(e) =>
-                  setNewOperation({
-                    ...newOperation,
-                    location: {
-                      ...newOperation.location,
-                      address: e.target.value,
-                    },
-                  })
-                }
+                onChange={handleAddressChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 placeholder="Enter address"
               />
@@ -1665,18 +1872,7 @@ const CoordinatorDashboard = () => {
                 <input
                   type="number"
                   value={newOperation.location.coordinates.latitude}
-                  onChange={(e) =>
-                    setNewOperation({
-                      ...newOperation,
-                      location: {
-                        ...newOperation.location,
-                        coordinates: {
-                          ...newOperation.location.coordinates,
-                          latitude: parseFloat(e.target.value),
-                        },
-                      },
-                    })
-                  }
+                  onChange={handleLatitudeChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                   placeholder="Latitude"
                 />
@@ -1688,18 +1884,7 @@ const CoordinatorDashboard = () => {
                 <input
                   type="number"
                   value={newOperation.location.coordinates.longitude}
-                  onChange={(e) =>
-                    setNewOperation({
-                      ...newOperation,
-                      location: {
-                        ...newOperation.location,
-                        coordinates: {
-                          ...newOperation.location.coordinates,
-                          longitude: parseFloat(e.target.value),
-                        },
-                      },
-                    })
-                  }
+                  onChange={handleLongitudeChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                   placeholder="Longitude"
                 />
@@ -1712,15 +1897,7 @@ const CoordinatorDashboard = () => {
               <input
                 type="text"
                 value={newOperation.requester.name}
-                onChange={(e) =>
-                  setNewOperation({
-                    ...newOperation,
-                    requester: {
-                      ...newOperation.requester,
-                      name: e.target.value,
-                    },
-                  })
-                }
+                onChange={handleRequesterNameChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 placeholder="Enter requester name"
               />
@@ -1732,15 +1909,7 @@ const CoordinatorDashboard = () => {
               <input
                 type="text"
                 value={newOperation.requester.phone}
-                onChange={(e) =>
-                  setNewOperation({
-                    ...newOperation,
-                    requester: {
-                      ...newOperation.requester,
-                      phone: e.target.value,
-                    },
-                  })
-                }
+                onChange={handleRequesterPhoneChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 placeholder="Enter requester phone"
               />
@@ -1751,9 +1920,7 @@ const CoordinatorDashboard = () => {
               </label>
               <select
                 value={newOperation.type}
-                onChange={(e) =>
-                  setNewOperation({ ...newOperation, type: e.target.value })
-                }
+                onChange={handleTypeChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
               >
                 <option value="">Select type</option>
@@ -1768,9 +1935,7 @@ const CoordinatorDashboard = () => {
               </label>
               <select
                 value={newOperation.category}
-                onChange={(e) =>
-                  setNewOperation({ ...newOperation, category: e.target.value })
-                }
+                onChange={handleCategoryChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
               >
                 <option value="">Select category</option>
@@ -1786,9 +1951,7 @@ const CoordinatorDashboard = () => {
               </label>
               <select
                 value={newOperation.priority}
-                onChange={(e) =>
-                  setNewOperation({ ...newOperation, priority: e.target.value })
-                }
+                onChange={handlePriorityChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
               >
                 <option value="low">Low</option>
@@ -1804,12 +1967,7 @@ const CoordinatorDashboard = () => {
               <input
                 type="number"
                 value={newOperation.estimatedDuration}
-                onChange={(e) =>
-                  setNewOperation({
-                    ...newOperation,
-                    estimatedDuration: parseInt(e.target.value),
-                  })
-                }
+                onChange={handleDurationChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 placeholder="Enter duration in minutes"
               />
@@ -1821,12 +1979,7 @@ const CoordinatorDashboard = () => {
               <input
                 type="number"
                 value={newOperation.teamSize}
-                onChange={(e) =>
-                  setNewOperation({
-                    ...newOperation,
-                    teamSize: parseInt(e.target.value),
-                  })
-                }
+                onChange={handleTeamSizeChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 placeholder="Enter team size"
               />
@@ -1838,14 +1991,7 @@ const CoordinatorDashboard = () => {
               <input
                 type="text"
                 value={newOperation.requiredSkills.join(", ")}
-                onChange={(e) =>
-                  setNewOperation({
-                    ...newOperation,
-                    requiredSkills: e.target.value
-                      ? e.target.value.split(",").map((s) => s.trim())
-                      : [],
-                  })
-                }
+                onChange={handleSkillsChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 placeholder="Enter skills (comma-separated)"
               />
@@ -1857,14 +2003,7 @@ const CoordinatorDashboard = () => {
               <input
                 type="text"
                 value={newOperation.equipment.join(", ")}
-                onChange={(e) =>
-                  setNewOperation({
-                    ...newOperation,
-                    equipment: e.target.value
-                      ? e.target.value.split(",").map((s) => s.trim())
-                      : [],
-                  })
-                }
+                onChange={handleEquipmentChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 placeholder="Enter equipment (comma-separated)"
               />
@@ -1876,12 +2015,7 @@ const CoordinatorDashboard = () => {
               <input
                 type="text"
                 value={newOperation.weatherConditions}
-                onChange={(e) =>
-                  setNewOperation({
-                    ...newOperation,
-                    weatherConditions: e.target.value,
-                  })
-                }
+                onChange={handleWeatherChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 placeholder="Enter weather conditions"
               />
@@ -1892,9 +2026,7 @@ const CoordinatorDashboard = () => {
               </label>
               <select
                 value={newOperation.riskLevel}
-                onChange={(e) =>
-                  setNewOperation({ ...newOperation, riskLevel: e.target.value })
-                }
+                onChange={handleRiskLevelChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
               >
                 <option value="low">Low</option>
@@ -1925,11 +2057,10 @@ const CoordinatorDashboard = () => {
         </div>
       </div>
     );
-  };
+  });
 
   return (
     <div className="min-h-screen bg-gray-100">
-      {/* Header */}
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
@@ -1985,7 +2116,6 @@ const CoordinatorDashboard = () => {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {error && (
           <div className="mb-4 p-4 bg-red-100 text-red-800 rounded-lg flex items-center gap-2">
@@ -2006,7 +2136,6 @@ const CoordinatorDashboard = () => {
           </div>
         )}
 
-        {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <StatsCard
             title="Total Operations"
@@ -2038,7 +2167,6 @@ const CoordinatorDashboard = () => {
           />
         </div>
 
-        {/* Tabs */}
         <div className="mb-6">
           <div className="flex border-b border-gray-200">
             {["operations", "volunteers", "communications", "reports"].map(
@@ -2059,7 +2187,6 @@ const CoordinatorDashboard = () => {
           </div>
         </div>
 
-        {/* Operations Tab */}
         {activeTab === "operations" && (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -2077,17 +2204,15 @@ const CoordinatorDashboard = () => {
 
             <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-100 p-6">
               <div className="flex flex-col md:flex-row gap-4 mb-6">
-                <div className="flex-1">
-                  <div className="relative">
-                    <Search className="h-5 w-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      placeholder="Search operations..."
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg"
-                    />
-                  </div>
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={handleSearchChange}
+                    placeholder="Search operations..."
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg"
+                  />
                 </div>
                 <select
                   value={statusFilter}
@@ -2124,7 +2249,7 @@ const CoordinatorDashboard = () => {
                 </select>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {filteredOperations.map((operation) => (
                   <EnhancedOperationCard
                     key={operation._id}
@@ -2133,28 +2258,19 @@ const CoordinatorDashboard = () => {
                 ))}
               </div>
             </div>
+
+            <NotificationPanel />
           </div>
         )}
 
-        {/* Volunteers Tab */}
         {activeTab === "volunteers" && <VolunteerManagementPanel />}
-
-        {/* Communications Tab */}
         {activeTab === "communications" && <CommunicationPanel />}
-
-        {/* Reports Tab */}
         {activeTab === "reports" && <ReportsPanel />}
 
-        {/* Notifications Panel */}
-        <div className="mt-6">
-          <NotificationPanel />
-        </div>
+        <OperationDetailsModal />
+        <VolunteerDetailsModal />
+        <CreateOperationModal />
       </main>
-
-      {/* Modals */}
-      <OperationDetailsModal />
-      <VolunteerDetailsModal />
-      <CreateOperationModal />
     </div>
   );
 };

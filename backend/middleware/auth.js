@@ -14,16 +14,9 @@ export const authenticateToken = async (req, res, next) => {
       });
     }
 
-    // Optional: Enable issuer/audience if used in JWT
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET /*, {
-         issuer: process.env.JWT_ISSUER || "disaster-management",
-         audience: process.env.JWT_AUDIENCE || "disaster-management-users",
-       }*/
-    );
-
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.userId).select("-password");
+
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -40,7 +33,12 @@ export const authenticateToken = async (req, res, next) => {
       });
     }
 
-    req.user = user;
+    req.user = {
+      userId: user._id,
+      email: user.email,
+      role: user.role,
+      ...user.toObject(),
+    };
     next();
   } catch (error) {
     if (error.name === "JsonWebTokenError") {
@@ -94,16 +92,16 @@ export const optionalAuth = async (req, res, next) => {
     const token = authHeader && authHeader.split(" ")[1];
 
     if (token) {
-      const decoded = jwt.verify(
-        token,
-        process.env.JWT_SECRET /*, {
-           issuer: process.env.JWT_ISSUER || "disaster-management",
-           audience: process.env.JWT_AUDIENCE || "disaster-management-users",
-         }*/
-      );
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
       const user = await User.findById(decoded.userId).select("-password");
+
       if (user && user.isActive) {
-        req.user = user;
+        req.user = {
+          userId: user._id,
+          email: user.email,
+          role: user.role,
+          ...user.toObject(),
+        };
       }
     }
 

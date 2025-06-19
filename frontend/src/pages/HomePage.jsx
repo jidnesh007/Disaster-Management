@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import {
   AlertTriangle,
   Shield,
@@ -157,53 +158,6 @@ const HomePage = () => {
     },
   ];
 
-  // Animated counter effect
-  useEffect(() => {
-    const duration = 2000;
-    const steps = 60;
-    const stepDuration = duration / steps;
-
-    let step = 0;
-    const timer = setInterval(() => {
-      step++;
-      const progress = step / steps;
-
-      setStatsCounter({
-        activeIncidents: Math.floor(finalStats.activeIncidents * progress),
-        peopleHelped: Math.floor(finalStats.peopleHelped * progress),
-        responseTime: parseFloat(
-          (finalStats.responseTime * progress).toFixed(1)
-        ),
-        sheltersOpen: Math.floor(finalStats.sheltersOpen * progress),
-        volunteersActive: Math.floor(finalStats.volunteersActive * progress),
-        resourcesDeployed: Math.floor(finalStats.resourcesDeployed * progress),
-      });
-
-      if (step >= steps) {
-        clearInterval(timer);
-        setStatsCounter(finalStats);
-      }
-    }, stepDuration);
-
-    return () => clearInterval(timer);
-  }, []);
-
-  // Alert rotation
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentAlert((prev) => (prev + 1) % alerts.length);
-    }, 4000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Testimonial rotation
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentTestimonial((prev) => (prev + 1) % testimonials.length);
-    }, 6000);
-    return () => clearInterval(interval);
-  }, []);
-
   const services = [
     {
       icon: <AlertTriangle className="w-12 h-12" />,
@@ -270,12 +224,14 @@ const HomePage = () => {
       icon: <Phone className="w-6 h-6" />,
       urgent: true,
       description: "Immediate emergency assistance",
+      link: "/sos",
     },
     {
       label: "Find Safe Zones",
       color: "from-blue-600 via-blue-700 to-blue-800",
       icon: <MapPin className="w-6 h-6" />,
       description: "Locate nearest shelters & hospitals",
+      link: "/map",
     },
     {
       label: "Join Response Team",
@@ -290,6 +246,53 @@ const HomePage = () => {
       description: "Submit real-time incident reports",
     },
   ];
+
+  // Animated counter effect
+  useEffect(() => {
+    const duration = 2000;
+    const steps = 60;
+    const stepDuration = duration / steps;
+
+    let step = 0;
+    const timer = setInterval(() => {
+      step++;
+      const progress = step / steps;
+
+      setStatsCounter({
+        activeIncidents: Math.floor(finalStats.activeIncidents * progress),
+        peopleHelped: Math.floor(finalStats.peopleHelped * progress),
+        responseTime: parseFloat(
+          (finalStats.responseTime * progress).toFixed(1)
+        ),
+        sheltersOpen: Math.floor(finalStats.sheltersOpen * progress),
+        volunteersActive: Math.floor(finalStats.volunteersActive * progress),
+        resourcesDeployed: Math.floor(finalStats.resourcesDeployed * progress),
+      });
+
+      if (step >= steps) {
+        clearInterval(timer);
+        setStatsCounter(finalStats);
+      }
+    }, stepDuration);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  // Alert rotation
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentAlert((prev) => (prev + 1) % alerts.length);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Testimonial rotation
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTestimonial((prev) => (prev + 1) % testimonials.length);
+    }, 6000);
+    return () => clearInterval(interval);
+  }, []);
 
   const getSeverityColor = (severity) => {
     switch (severity) {
@@ -379,19 +382,20 @@ const HomePage = () => {
               >
                 About
               </a>
-              <a href="login">
+              <Link to="/login">
                 <button className="bg-gradient-to-r from-red-600 via-red-700 to-red-800 hover:from-red-700 hover:via-red-800 hover:to-red-900 text-white px-8 py-3 rounded-full font-bold transition-all duration-300 transform hover:scale-105 shadow-2xl hover:shadow-red-500/25 ring-2 ring-red-500/20 hover:ring-red-400/40">
                   <span className="flex items-center space-x-2">
                     <span>Login</span>
                     <ArrowRight className="w-4 h-4" />
                   </span>
                 </button>
-              </a>
+              </Link>
             </div>
 
             <button
               className="md:hidden text-white p-2 hover:bg-white/10 rounded-lg transition-colors"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
+              aria-label="Toggle mobile menu"
             >
               {isMenuOpen ? (
                 <X className="w-6 h-6" />
@@ -430,11 +434,11 @@ const HomePage = () => {
               >
                 About
               </a>
-              <a href="/login">
+              <Link to="/login">
                 <button className="w-full bg-gradient-to-r from-red-600 to-red-700 text-white py-3 rounded-full font-bold mt-4">
                   Login
                 </button>
-              </a>
+              </Link>
             </div>
           </div>
         )}
@@ -515,8 +519,9 @@ const HomePage = () => {
           {/* Quick Action Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
             {quickActions.map((action, index) => (
-              <button
+              <Link
                 key={index}
+                to={action.link || "#"}
                 className={`group bg-gradient-to-br ${
                   action.color
                 } text-white p-8 rounded-3xl font-bold 
@@ -540,7 +545,7 @@ const HomePage = () => {
                     {action.description}
                   </div>
                 </div>
-              </button>
+              </Link>
             ))}
           </div>
 
@@ -969,7 +974,8 @@ const HomePage = () => {
               </p>
 
               <div className="flex flex-col md:flex-row gap-6 justify-center items-center">
-                <button
+                <Link
+                  to="/sos"
                   className="bg-gradient-to-r from-red-600 via-red-700 to-red-800 hover:from-red-700 hover:via-red-800 hover:to-red-900 
                                  text-white px-12 py-6 rounded-full font-bold text-xl transition-all duration-300 
                                  transform hover:scale-110 shadow-2xl hover:shadow-red-500/50 ring-2 ring-red-500/30 hover:ring-red-400/60
@@ -978,7 +984,7 @@ const HomePage = () => {
                   <Shield className="w-6 h-6" />
                   <span>Get Started Now</span>
                   <ArrowRight className="w-6 h-6" />
-                </button>
+                </Link>
 
                 <button
                   className="bg-white/10 hover:bg-white/20 text-white px-12 py-6 rounded-full font-bold text-xl 

@@ -7,6 +7,10 @@ import HomePage from "./pages/HomePage.jsx";
 import CoordinatorDashboard from "./CoordinatorDashboard.jsx";
 import SOSSystem from "./pages/SOSSystem.jsx";
 import MumbaiDisasterMap from "./pages/MumbaiDisasterMap.jsx";
+import IncidentReportForm from "./pages/IncidentReportForm.jsx";
+import LiveAlerts from "./pages/LiveAlerts.jsx";
+import Resource from "./pages/Resource.jsx";
+import AdminDashboard from "./pages/AdminDashboard.jsx";
 
 // ErrorBoundary to catch and handle runtime errors gracefully
 class ErrorBoundary extends React.Component {
@@ -40,6 +44,7 @@ function App() {
     <BrowserRouter>
       <ErrorBoundary>
         <Routes>
+
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/volunteer" element={<Volunteer />} />
@@ -47,6 +52,9 @@ function App() {
           <Route path="/coordinator" element={<CoordinatorDashboard />} />
           <Route path="/sos" element={<SOSSystem />} />
           <Route path="/map" element={<MumbaiDisasterMap />} />
+          <Route path="/incident-report" element={<IncidentReportForm />} />
+          <Route path="/resource" element={<Resource />} />
+          <Route path="/live" element={<LiveAlerts />} />
           <Route path="/dashboard" element={<div>Dashboard Placeholder</div>} />
           <Route
             path="*"

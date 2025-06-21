@@ -238,12 +238,14 @@ const HomePage = () => {
       color: "from-green-600 via-green-700 to-green-800",
       icon: <Users className="w-6 h-6" />,
       description: "Volunteer for disaster relief",
+      link: "/login",
     },
     {
       label: "Report Incident",
       color: "from-orange-600 via-orange-700 to-orange-800",
       icon: <AlertTriangle className="w-6 h-6" />,
       description: "Submit real-time incident reports",
+      link: "/incident-report",
     },
   ];
 
@@ -365,13 +367,13 @@ const HomePage = () => {
                 Services
               </a>
               <a
-                href="#alerts"
+                href="/live"
                 className="text-white/80 hover:text-white transition-all duration-300 hover:scale-105 font-medium"
               >
                 Live Alerts
               </a>
               <a
-                href="#resources"
+                href="/resource"
                 className="text-white/80 hover:text-white transition-all duration-300 hover:scale-105 font-medium"
               >
                 Resources

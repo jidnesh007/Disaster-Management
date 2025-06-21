@@ -1,5 +1,5 @@
 
-# 🌪️ Mumbai Disaster Management System (MERN Stack)
+# 🌪️ Disaster Management System (MERN Stack)
 
 A comprehensive real-time disaster management system built using the MERN stack (MongoDB, Express, React, Node.js) with WebSocket-powered live updates. This application empowers authorities, coordinators, rescue teams, and citizens to respond swiftly and effectively during disasters.
 
@@ -138,25 +138,4 @@ npm run dev
 
 ---
 
-## 🙌 Contributors
 
-Made with ❤️ by \[Your Name].
-
----
-
-## 📄 License
-
-This project is licensed under the [MIT License](LICENSE).
-
----
-
-## 📬 Contact
-
-For any queries or collaboration requests, please reach out via [email@example.com](mailto:email@example.com).
-
-```
-
----
-
-Let me know if you'd like a badge section, deployment instructions (e.g. with Vercel/Render), or database schema diagrams included!
-```
